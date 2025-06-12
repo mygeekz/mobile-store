@@ -1,0 +1,27 @@
+
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    /* Bundler mode */
+    "moduleResolution": "bundler", // Changed from NodeNext for Vite frontend
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true, 
+    "allowSyntheticDefaultImports": true, 
+    "forceConsistentCasingInFileNames": true 
+  },
+  "include": ["src", "index.tsx", "types.ts", "constants.ts", "App.tsx", "components", "pages"],
+  "references": [{ "path": "./tsconfig.node.json" }, {"path": "./tsconfig.server.json"}]
+}
