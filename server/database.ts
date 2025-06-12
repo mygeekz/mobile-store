@@ -1,3 +1,4 @@
+
 import sqlite3 from 'sqlite3';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -31,8 +32,8 @@ export interface PhoneEntryPayload {
   purchasePrice: number;
   salePrice?: number | null;
   sellerName?: string | null;
-  purchaseDate?: string | null; // ISO Date string yyyy-MM-dd
-  saleDate?: string | null;     // ISO Date string yyyy-MM-dd
+  purchaseDate?: string | null; // ISO Date string YYYY-MM-DD
+  saleDate?: string | null;     // ISO Date string YYYY-MM-DD
   registerDate?: string; // ISO DateTime string
   status?: string; // e.g., "موجود در انبار", "فروخته شده"
   notes?: string | null;
@@ -42,7 +43,7 @@ export interface SaleDataPayload {
   itemType: 'phone' | 'inventory';
   itemId: number;
   quantity: number;
-  transactionDate: string; // Shamsi date yyyy/MM/dd
+  transactionDate: string; // Shamsi date YYYY/MM/DD
   customerId?: number | null;
   notes?: string | null;
   discount?: number;
@@ -261,8 +262,8 @@ const initializeDatabaseInternal = async (): Promise<void> => {
         salePrice REAL,
         sellerName TEXT,
         buyerName TEXT,
-        purchaseDate TEXT, /* ISO Date yyyy-MM-dd */
-        saleDate TEXT,     /* ISO Date yyyy-MM-dd */
+        purchaseDate TEXT, /* ISO Date YYYY-MM-DD */
+        saleDate TEXT,     /* ISO Date YYYY-MM-DD */
         registerDate TEXT NOT NULL, /* ISO DateTime string */
         status TEXT NOT NULL, /* e.g., "موجود در انبار", "فروخته شده" */
         notes TEXT,
@@ -301,7 +302,7 @@ const initializeDatabaseInternal = async (): Promise<void> => {
     await runAsync(`
       CREATE TABLE IF NOT EXISTS sales_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        transactionDate TEXT NOT NULL, /* Shamsi date string e.g., "yyyy/MM/dd" */
+        transactionDate TEXT NOT NULL, /* Shamsi date string e.g., "YYYY/MM/DD" */
         itemType TEXT NOT NULL CHECK(itemType IN ('phone', 'inventory')),
         itemId INTEGER NOT NULL,
         itemName TEXT NOT NULL,
@@ -704,7 +705,7 @@ export const recordSaleTransactionInDb = async (saleData: SaleDataPayload): Prom
       if (quantity !== 1) throw new Error('تعداد برای فروش گوشی باید ۱ باشد.');
       const phone = await getAsync("SELECT model, imei, salePrice, status FROM phones WHERE id = ?", [itemId]);
       if (!phone) throw new Error('گوشی مورد نظر برای فروش یافت نشد.');
-      if (phone.status !== 'موجود در انبار') throw new Error(`گوشی "${phone.model} (IMEI: <span class="math-inline">\{phone\.imei\}\)" در وضعیت "</span>{phone.status}" قرار دارد و قابل فروش نیست.`);
+      if (phone.status !== 'موجود در انبار') throw new Error(`گوشی "${phone.model} (IMEI: ${phone.imei})" در وضعیت "${phone.status}" قرار دارد و قابل فروش نیست.`);
       if (phone.salePrice === null || typeof phone.salePrice !== 'number' || phone.salePrice <= 0) throw new Error(`قیمت فروش برای گوشی "${phone.model} (IMEI: ${phone.imei})" مشخص نشده یا نامعتبر است.`);
 
       itemName = `${phone.model} (IMEI: ${phone.imei})`;
@@ -896,23 +897,16 @@ export const addPartnerToDb = async (partnerData: PartnerPayload): Promise<any> 
   }
 };
 
-export const getAllPartnersWithBalanceFromDb = async (
-  partnerTypeFilter: string | null = null
-): Promise<any[]> => {
+export const getAllPartnersWithBalanceFromDb = async (): Promise<any[]> => {
   await getDbInstance();
-  let sql = `
+  try {
+    return await allAsync(`
       SELECT
         p.id, p.partnerName, p.partnerType, p.contactPerson, p.phoneNumber, p.email, p.address, p.notes, p.dateAdded,
         COALESCE((SELECT pl.balance FROM partner_ledger pl WHERE pl.partnerId = p.id ORDER BY pl.id DESC LIMIT 1), 0) as currentBalance
-      FROM partners p`;
-  const params: any[] = [];
-  if (partnerTypeFilter) {
-    sql += ' WHERE p.partnerType = ?';
-    params.push(partnerTypeFilter);
-  }
-  sql += ' ORDER BY p.partnerName ASC';
-  try {
-    return await allAsync(sql, params);
+      FROM partners p
+      ORDER BY p.partnerName ASC
+    `);
   } catch (err: any) {
     console.error('DB Error (getAllPartnersWithBalanceFromDb):', err);
     throw new Error(`خطای پایگاه داده: ${err.message}`);
@@ -1060,7 +1054,7 @@ export const getSalesSummaryAndProfit = async (fromDateShamsi: string, toDateSha
       const daySales = dailySalesMap.get(sale.transactionDate) || 0;
       dailySalesMap.set(sale.transactionDate, daySales + sale.totalPrice);
 
-      const itemKey = `<span class="math-inline">\{sale\.itemType\}\-</span>{sale.itemId}`;
+      const itemKey = `${sale.itemType}-${sale.itemId}`;
       const currentItemSales = itemSalesMap.get(itemKey) || { id: sale.itemId, itemType: sale.itemType, itemName: sale.itemName, totalRevenue: 0, quantitySold: 0 };
       currentItemSales.totalRevenue += sale.totalPrice;
       currentItemSales.quantitySold += sale.quantity;
@@ -1556,7 +1550,7 @@ export const getDashboardRecentActivities = async (limit: number = 7): Promise<a
      customerPayments.forEach(cp => activities.push({
       id: `custpay-${cp.id}`,
       typeDescription: 'دریافت از مشتری',
-      details: `دریافت مبلغ ${cp.credit.toLocaleString('fa-IR')} تومان از <span class="math-inline">\{cp\.customerName\} \(</span>{cp.description})`,
+      details: `دریافت مبلغ ${cp.credit.toLocaleString('fa-IR')} تومان از ${cp.customerName} (${cp.description})`,
       timestamp: cp.transactionDate,
       icon: 'fa-solid fa-hand-holding-dollar',
       color: 'text-blue-500',
@@ -1573,7 +1567,7 @@ export const getDashboardRecentActivities = async (limit: number = 7): Promise<a
     partnerPayments.forEach(pp => activities.push({
       id: `partpay-${pp.id}`,
       typeDescription: 'پرداخت به همکار',
-      details: `پرداخت مبلغ ${pp.debit.toLocaleString('fa-IR')} تومان به <span class="math-inline">\{pp\.partnerName\} \(</span>{pp.description})`,
+      details: `پرداخت مبلغ ${pp.debit.toLocaleString('fa-IR')} تومان به ${pp.partnerName} (${pp.description})`,
       timestamp: pp.transactionDate,
       icon: 'fa-solid fa-money-bill-transfer',
       color: 'text-orange-500',
@@ -1676,7 +1670,7 @@ export const addMobilePhoneToDbTransaction = async (mobilePhoneData: OldMobilePh
     }
 };
 
-// Helper to convert Shamsi yyyy/MM/dd to ISO yyyy-MM-dd for DB storage if needed for specific columns
+// Helper to convert Shamsi YYYY/MM/DD to ISO YYYY-MM-DD for DB storage if needed for specific columns
 // This is not actively used by ledger functions currently as they expect ISO directly
 const fromShamsiStringToISO = (shamsiDateString?: string | null): string | undefined => {
     if (!shamsiDateString) return undefined;
@@ -1684,7 +1678,7 @@ const fromShamsiStringToISO = (shamsiDateString?: string | null): string | undef
         const m = moment(shamsiDateString, 'jYYYY/jMM/jDD');
         return m.isValid() ? m.format('YYYY-MM-DD') : undefined;
     } catch (e) {
-        console.warn("Error converting Shamsi to ISO yyyy-MM-dd:", shamsiDateString, e);
+        console.warn("Error converting Shamsi to ISO YYYY-MM-DD:", shamsiDateString, e);
         return undefined;
     }
 };

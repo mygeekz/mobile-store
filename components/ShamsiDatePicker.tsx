@@ -1,9 +1,9 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { DayPicker, SelectSingleEventHandler, ClassNames, Formatters, DayPickerProps } from 'react-day-picker';
+import React, { useState, useRef, useEffect, ReactNode } from 'react';
+import { DayPicker, SelectSingleEventHandler, ClassNames, Formatters } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import moment from 'jalali-moment';
-import type { Locale, DateLibOptions } from 'react-day-picker';
+import type { Locale, DateLibOptions } from 'react-day-picker'; // Added DateLibOptions
 
 interface ShamsiDatePickerProps {
   selectedDate: Date | null | undefined;
@@ -14,6 +14,7 @@ interface ShamsiDatePickerProps {
   disabled?: boolean;
 }
 
+// Updated formatters to explicitly return string
 const formatCaptionShamsi = (date: Date, options?: { locale?: Locale }): string => {
     return moment(date).locale('fa').format('jMMMM jYYYY');
 };
@@ -102,7 +103,8 @@ const shamsiFnsLocale: Locale = {
   },
 };
 
-const shamsiFormatters: Formatters = {
+// react-day-picker's internal DateLib type for formatters expects string returns when used with a locale like this.
+const shamsiFormatters: Formatters<Locale> = {
     formatCaption: formatCaptionShamsi as (month: Date, options?: DateLibOptions) => string,
     formatWeekdayName: formatWeekdayNameShamsi as (weekday: Date, options?: DateLibOptions) => string,
     formatDay: formatDayShamsi as (day: Date, options?: DateLibOptions) => string,
@@ -138,6 +140,10 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
+    // const mDate = moment(e.target.value, 'jYYYY/jMM/jDD', true); 
+    // if (mDate.isValid()) {
+    // onDateChange(mDate.toDate()); // Consider implications of immediate update
+    // }
   };
 
   const handleInputBlur = () => {
@@ -149,18 +155,14 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
     } else if (inputValue === '') {
         if (selectedDate) onDateChange(null);
     } else {
-        // Revert to last valid selectedDate if input is invalid and not empty
         if (selectedDate) {
             setInputValue(moment(selectedDate).locale('fa').format('YYYY/MM/DD'));
         } else {
             setInputValue('');
         }
     }
-    // Delay closing to allow click on picker
     setTimeout(() => {
-        if (pickerRef.current && inputRef.current && 
-            !pickerRef.current.contains(document.activeElement) && 
-            document.activeElement !== inputRef.current) {
+        if (pickerRef.current && inputRef.current && !pickerRef.current.contains(document.activeElement) && document.activeElement !== inputRef.current) {
              setIsOpen(false);
         }
     }, 150);
@@ -190,7 +192,7 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
     caption_label: "text-sm font-medium text-indigo-700",
     button_previous: "absolute right-1.5 top-1.5 text-indigo-600 hover:text-indigo-800", 
     button_next: "absolute left-1.5 top-1.5 text-indigo-600 hover:text-indigo-800", 
-    head_cell: "text-xs font-medium text-gray-500 w-9 text-center", // Ensure head_cell is valid, adjust if needed
+    head_cell: "text-xs font-medium text-gray-500 w-9",
     cell: "text-center",
     day: "h-9 w-9 p-0 text-sm hover:bg-indigo-100 rounded-md transition-colors",
     day_today: "font-bold text-indigo-600",
@@ -201,13 +203,6 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
     dropdown_icon: "hidden", 
     dropdown_month: "rdp-dropdown_month mx-0.5",
     dropdown_year: "rdp-dropdown_year mx-0.5",
-    months: "flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4", // For multi-month view if used
-    month: "space-y-4",
-    table: "w-full border-collapse",
-    head_row: "flex",
-    row: "flex w-full mt-2",
-    day_disabled: "text-gray-300 cursor-not-allowed",
-    nav_button: "h-6 w-6 flex items-center justify-center p-1 rounded-md hover:bg-gray-100",
   };
 
   return (
@@ -241,7 +236,7 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
             showOutsideDays
             initialFocus={isOpen} 
             defaultMonth={defaultMonthGregorian} 
-            captionLayout={"dropdown" as DayPickerProps['captionLayout']} // Use "dropdown" to satisfy type, was "dropdown-buttons"
+            captionLayout="dropdown-buttons" // Changed to dropdown-buttons for better compatibility
             fromYear={moment().jYear() - 100} 
             toYear={moment().jYear() + 20}   
             classNames={dayPickerClassNames}

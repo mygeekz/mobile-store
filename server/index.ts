@@ -1,13 +1,11 @@
 
-import express, { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
+import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction, ErrorRequestHandler } from 'express';
 import moment from 'jalali-moment';
 import multer, { MulterError } from 'multer';
 import fs from 'fs';
 import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { ParsedQs } from 'qs'; // For req.query typing
-import core from 'express-serve-static-core';
-
+// bcryptjs is correctly imported in database.ts, no need here if not directly used for hashing.
 
 import {
   addProductToDb,
@@ -50,17 +48,16 @@ import {
   addUserToDb,
   getAllUsersWithRoles,
   getAsync,
-  getDashboardKPIs,
-  getDashboardSalesChartData,
+  getDashboardKPIs, 
+  getDashboardSalesChartData, 
   getDashboardRecentActivities,
-  ProductPayload,
-  PhoneEntryPayload,
-  SaleDataPayload,
-  CustomerPayload,
-  LedgerEntryPayload,
-  PartnerPayload,
-  SettingItem,
-  fromShamsiStringToISO
+  ProductPayload, 
+  PhoneEntryPayload, 
+  SaleDataPayload, 
+  CustomerPayload, 
+  LedgerEntryPayload, 
+  PartnerPayload, 
+  SettingItem, 
 } from './database';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +65,6 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const port = 3001;
-app.use('/api', router);
 
 app.use(express.json());
 
@@ -80,16 +76,16 @@ app.use('/uploads', express.static(uploadsDir));
 
 // Multer setup for logo
 const logoStorage = multer.diskStorage({
-  destination: function (req: Request, file: Express.Multer.File, cb) {
+  destination: function (req: ExpressRequest, file: Express.Multer.File, cb) {
     cb(null, uploadsDir);
   },
-  filename: function (req: Request, file: Express.Multer.File, cb) {
+  filename: function (req: ExpressRequest, file: Express.Multer.File, cb) {
     cb(null, `logo-${Date.now()}${path.extname(file.originalname)}`);
   }
 });
-const imageFileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const imageFileFilter = (req: ExpressRequest, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (!file.originalname.match(/\.(jpg|jpeg|png|gif|svg|webp)$/i)) {
-    return cb(new Error('فقط فایل‌های تصویری مجاز هستند!') as any, false);
+    return cb(new Error('فقط فایل‌های تصویری مجاز هستند!') as any, false); 
   }
   cb(null, true);
 };
@@ -97,7 +93,7 @@ const uploadLogo = multer({ storage: logoStorage, fileFilter: imageFileFilter, l
 
 // Multer setup for DB restore
 const dbRestoreStorage = multer.memoryStorage();
-const dbFileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const dbFileFilter = (req: ExpressRequest, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (path.extname(file.originalname).toLowerCase() !== '.db') {
     return cb(new Error('فایل پشتیبان باید با فرمت .db باشد.') as any, false);
   }
@@ -106,7 +102,7 @@ const dbFileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFi
 const uploadDb = multer({ storage: dbRestoreStorage, fileFilter: dbFileFilter, limits: { fileSize: 100 * 1024 * 1024 } });
 
 
-const shamsiToISOForAPI = (shamsiDateString?: string, endOfDay: boolean = false): string | undefined => {
+const shamsiToISO = (shamsiDateString?: string, endOfDay: boolean = false): string | undefined => {
   if (!shamsiDateString || typeof shamsiDateString !== 'string') return undefined;
   try {
     let m = moment(shamsiDateString.trim(), 'jYYYY/jMM/jDD');
@@ -127,7 +123,7 @@ const shamsiToISOForAPI = (shamsiDateString?: string, endOfDay: boolean = false)
 // --- API Endpoints with TypeScript types and robust error handling ---
 
 // Categories API
-app.get('/api/categories', async (req: Request, res: Response) => {
+app.get('/categories', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const categories = await getAllCategoriesFromDb();
     res.json({ success: true, data: categories });
@@ -137,7 +133,7 @@ app.get('/api/categories', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/categories', async (req: Request<{}, any, { name: string }>, res: Response) => {
+app.post('/categories', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { name } = req.body;
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -155,11 +151,11 @@ app.get('/api/categories', async (req: Request<{}, any, { name: string }>, res: 
 });
 
 // General Products API
-app.get('/api/products', async (req: Request<{}, any, any, { supplierId?: string }>, res: Response) => {
+app.get('/products', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const supplierIdQuery = req.query.supplierId;
+    const supplierIdQuery = req.query.supplierId as string | undefined;
     const supplierId = supplierIdQuery ? Number(supplierIdQuery) : null;
-    if (supplierIdQuery && isNaN(supplierId as number)) { 
+    if (supplierIdQuery && isNaN(supplierId as number)) {
         return res.status(400).json({ success: false, message: 'شناسه تامین‌کننده نامعتبر است.' });
     }
     const products = await getAllProductsFromDb(supplierId);
@@ -170,7 +166,7 @@ app.get('/api/products', async (req: Request<{}, any, any, { supplierId?: string
   }
 });
 
-app.get('/api/products', async (req: Request<{}, any, ProductPayload>, res: Response) => {
+app.post('/products', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { name, purchasePrice, sellingPrice, stock_quantity, categoryId, supplierId } = req.body;
     if (!name || typeof name !== 'string' || String(name).trim() === '') {
@@ -217,9 +213,9 @@ app.get('/api/products', async (req: Request<{}, any, ProductPayload>, res: Resp
 });
 
 // Standalone 'phones' table API
-app.get('/api/phones', async (req: Request<{}, any, any, { supplierId?: string }>, res: Response) => {
+app.get('/phones', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const supplierIdQuery = req.query.supplierId;
+    const supplierIdQuery = req.query.supplierId as string | undefined;
     const supplierId = supplierIdQuery ? Number(supplierIdQuery) : null;
      if (supplierIdQuery && isNaN(supplierId as number)) {
         return res.status(400).json({ success: false, message: 'شناسه تامین‌کننده نامعتبر است.' });
@@ -232,11 +228,11 @@ app.get('/api/phones', async (req: Request<{}, any, any, { supplierId?: string }
   }
 });
 
-app.get('/api/phones', async (req: Request<{}, any, PhoneEntryPayload>, res: Response) => {
+app.post('/phones', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const {
       model, color, storage, ram, imei, batteryHealth, condition,
-      purchasePrice, salePrice, sellerName, purchaseDate, 
+      purchasePrice, salePrice, sellerName, purchaseDate,
       saleDate, status, notes, supplierId
     } = req.body;
 
@@ -270,7 +266,7 @@ app.get('/api/phones', async (req: Request<{}, any, PhoneEntryPayload>, res: Res
       purchasePrice: numPurchasePrice,
       salePrice: (salePrice !== undefined && salePrice !== null && String(salePrice).trim() !== '') ? parseFloat(String(salePrice)) : undefined,
       sellerName: sellerName ? String(sellerName).trim() : null,
-      purchaseDate: purchaseDate ? String(purchaseDate).trim() : undefined,
+      purchaseDate: purchaseDate ? String(purchaseDate).trim() : undefined, 
       saleDate: saleDate ? String(saleDate).trim() : undefined, 
       registerDate: new Date().toISOString(),
       status: status ? String(status).trim() : "موجود در انبار",
@@ -290,7 +286,7 @@ app.get('/api/phones', async (req: Request<{}, any, PhoneEntryPayload>, res: Res
 });
 
 // --- Sales Section API Endpoints ---
-app.get('/api/sellable-items', async (req: Request, res: Response) => {
+app.get('/sellable-items', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const items = await getSellableItemsFromDb();
     res.json({ success: true, data: items });
@@ -300,9 +296,9 @@ app.get('/api/sellable-items', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/sales', async (req: Request<{}, any, any, { customerId?: string }>, res: Response) => {
+app.get('/sales', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const customerIdQuery = req.query.customerId;
+    const customerIdQuery = req.query.customerId as string | undefined;
     const customerId = customerIdQuery ? Number(customerIdQuery) : null;
     if (customerIdQuery && isNaN(customerId as number)) {
       return res.status(400).json({ success: false, message: 'شناسه مشتری نامعتبر است.' });
@@ -315,7 +311,7 @@ app.get('/api/sales', async (req: Request<{}, any, any, { customerId?: string }>
   }
 });
 
-app.get('/api/sales', async (req: Request<{}, any, SaleDataPayload>, res: Response) => {
+app.post('/sales', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { itemType, itemId, quantity, transactionDate, customerId, notes, discount } = req.body;
     const parsedDiscount = discount !== undefined && discount !== null ? parseFloat(String(discount)) : 0;
@@ -328,8 +324,8 @@ app.get('/api/sales', async (req: Request<{}, any, SaleDataPayload>, res: Respon
     }
 
     const saleData: SaleDataPayload = {
-      itemType: itemType as 'phone' | 'inventory',
-      itemId: Number(itemId),
+      itemType: itemType as 'phone' | 'inventory', 
+      itemId: Number(itemId), 
       quantity: Number(quantity),
       transactionDate: String(transactionDate).trim(),
       customerId: customerId ? Number(customerId) : null,
@@ -349,7 +345,7 @@ app.get('/api/sales', async (req: Request<{}, any, SaleDataPayload>, res: Respon
 });
 
 // --- Customers API Endpoints ---
-app.get('/api/customers', async (req: Request, res: Response) => {
+app.get('/customers', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const customers = await getAllCustomersWithBalanceFromDb();
     res.json({ success: true, data: customers });
@@ -359,7 +355,7 @@ app.get('/api/customers', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/customers', async (req: Request<{}, any, CustomerPayload>, res: Response) => {
+app.post('/customers', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { fullName, phoneNumber, address, notes } = req.body;
     if (!fullName || typeof fullName !== 'string' || String(fullName).trim() === '') {
@@ -382,7 +378,7 @@ app.get('/api/customers', async (req: Request<{}, any, CustomerPayload>, res: Re
   }
 });
 
-app.get('/api/customers/:id', async (req: Request<{ id: string }>, res: Response) => {
+app.get('/customers/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     if (isNaN(customerId)) return res.status(400).json({ success: false, message: 'شناسه مشتری نامعتبر است.' });
@@ -400,7 +396,7 @@ app.get('/api/customers/:id', async (req: Request<{ id: string }>, res: Response
   }
 });
 
-app.put('/customers/:id', async (req: Request<{ id: string }, any, CustomerPayload>, res: Response) => {
+app.put('/customers/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     if (isNaN(customerId)) return res.status(400).json({ success: false, message: 'شناسه مشتری نامعتبر است.' });
@@ -410,9 +406,9 @@ app.put('/customers/:id', async (req: Request<{ id: string }, any, CustomerPaylo
       return res.status(400).json({ success: false, message: 'نام کامل مشتری الزامی است.' });
     }
     const customerData: CustomerPayload = {
-      fullName: String(fullName).trim(),
+      fullName: String(fullName).trim(), 
       phoneNumber: phoneNumber ? String(phoneNumber).trim() : undefined,
-      address: address ? String(address).trim() : undefined,
+      address: address ? String(address).trim() : undefined, 
       notes: notes ? String(notes).trim() : undefined
     };
     const updatedCustomer = await updateCustomerInDb(customerId, customerData);
@@ -426,7 +422,7 @@ app.put('/customers/:id', async (req: Request<{ id: string }, any, CustomerPaylo
   }
 });
 
-app.delete('/customers/:id', async (req: Request<{ id: string }>, res: Response) => {
+app.delete('/customers/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     if (isNaN(customerId)) return res.status(400).json({ success: false, message: 'شناسه مشتری نامعتبر است.' });
@@ -441,12 +437,12 @@ app.delete('/customers/:id', async (req: Request<{ id: string }>, res: Response)
   }
 });
 
-app.get('/api/customers/:id/ledger', async (req: Request<{ id: string }, any, LedgerEntryPayload>, res: Response) => {
+app.post('/customers/:id/ledger', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const customerId = parseInt(req.params.id, 10);
     if (isNaN(customerId)) return res.status(400).json({ success: false, message: 'شناسه مشتری نامعتبر است.' });
 
-    const { description, debit, credit, transactionDate } = req.body; // transactionDate is ISO from frontend
+    const { description, debit, credit, transactionDate } = req.body; 
     if (!description?.trim()) return res.status(400).json({ success: false, message: 'شرح تراکنش الزامی است.' });
 
     const parsedDebit = debit !== undefined ? parseFloat(String(debit)) : 0;
@@ -459,12 +455,9 @@ app.get('/api/customers/:id/ledger', async (req: Request<{ id: string }, any, Le
     }
     
     let transactionDateISO = transactionDate ? String(transactionDate).trim() : new Date().toISOString();
-    if (transactionDate && moment(transactionDateISO, "YYYY-MM-DD", true).isValid()) {
-        transactionDateISO = moment(transactionDateISO, "YYYY-MM-DD").toISOString();
-    } else if (transactionDate && !moment(transactionDateISO, moment.ISO_8601, true).isValid()){
-        return res.status(400).json({ success: false, message: 'فرمت تاریخ تراکنش نامعتبر است (باید YYYY-MM-DD یا ISO 8601 باشد).' });
+    if (transactionDate && !moment(transactionDateISO, moment.ISO_8601, true).isValid()){ // Expect ISO from frontend
+        return res.status(400).json({ success: false, message: 'فرمت تاریخ تراکنش نامعتبر است (باید ISO 8601 باشد).' });
     }
-
 
     const ledgerData: LedgerEntryPayload = {
         description: String(description).trim(),
@@ -482,7 +475,7 @@ app.get('/api/customers/:id/ledger', async (req: Request<{ id: string }, any, Le
 
 
 // --- Partners API Endpoints ---
-app.get('/api/partners', async (req: Request, res: Response) => {
+app.get('/partners', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const partners = await getAllPartnersWithBalanceFromDb();
     res.json({ success: true, data: partners });
@@ -492,7 +485,7 @@ app.get('/api/partners', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/partners', async (req: Request<{}, any, PartnerPayload>, res: Response) => {
+app.post('/partners', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { partnerName, partnerType, contactPerson, phoneNumber, email, address, notes } = req.body;
     if (!partnerName || typeof partnerName !== 'string' || String(partnerName).trim() === '') {
@@ -521,7 +514,7 @@ app.get('/api/partners', async (req: Request<{}, any, PartnerPayload>, res: Resp
   }
 });
 
-app.get('/api/partners/:id', async (req: Request<{ id: string }>, res: Response) => {
+app.get('/partners/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const partnerId = parseInt(req.params.id, 10);
     if (isNaN(partnerId)) {
@@ -541,7 +534,7 @@ app.get('/api/partners/:id', async (req: Request<{ id: string }>, res: Response)
   }
 });
 
-app.put('/partners/:id', async (req: Request<{ id: string }, any, PartnerPayload>, res: Response) => {
+app.put('/partners/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const partnerId = parseInt(req.params.id, 10);
     if (isNaN(partnerId)) {
@@ -564,7 +557,7 @@ app.put('/partners/:id', async (req: Request<{ id: string }, any, PartnerPayload
       notes: notes ? String(notes).trim() : undefined
     };
     const updatedPartner = await updatePartnerInDb(partnerId, partnerData);
-    if (!updatedPartner) {
+    if (!updatedPartner) { 
         return res.status(404).json({ success: false, message: 'همکار برای به‌روزرسانی یافت نشد.'});
     }
     res.json({ success: true, data: updatedPartner });
@@ -577,7 +570,7 @@ app.put('/partners/:id', async (req: Request<{ id: string }, any, PartnerPayload
   }
 });
 
-app.delete('/partners/:id', async (req: Request<{ id: string }>, res: Response) => {
+app.delete('/partners/:id', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const partnerId = parseInt(req.params.id, 10);
     if (isNaN(partnerId)) {
@@ -594,7 +587,7 @@ app.delete('/partners/:id', async (req: Request<{ id: string }>, res: Response) 
   }
 });
 
-app.get('/api/partners/:id/ledger', async (req: Request<{ id: string }, any, LedgerEntryPayload>, res: Response) => {
+app.post('/partners/:id/ledger', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const partnerId = parseInt(req.params.id, 10);
     if (isNaN(partnerId)) {
@@ -622,12 +615,9 @@ app.get('/api/partners/:id/ledger', async (req: Request<{ id: string }, any, Led
     }
     
     let transactionDateISO = transactionDate ? String(transactionDate).trim() : new Date().toISOString();
-    if (transactionDate && moment(transactionDateISO, "YYYY-MM-DD", true).isValid()) {
-       transactionDateISO = moment(transactionDateISO, "YYYY-MM-DD").toISOString();
-   } else if (transactionDate && !moment(transactionDateISO, moment.ISO_8601, true).isValid()){
-       return res.status(400).json({ success: false, message: 'فرمت تاریخ تراکنش نامعتبر است (باید YYYY-MM-DD یا ISO 8601 باشد).' });
-   }
-
+    if (transactionDate && !moment(transactionDateISO, moment.ISO_8601, true).isValid()){ // Expect ISO from frontend
+        return res.status(400).json({ success: false, message: 'فرمت تاریخ تراکنش نامعتبر است (باید ISO 8601 باشد).' });
+    }
     const ledgerData: LedgerEntryPayload = {
         description: String(description).trim(),
         debit: parsedDebit,
@@ -644,9 +634,9 @@ app.get('/api/partners/:id/ledger', async (req: Request<{ id: string }, any, Led
 
 
 // --- Reporting API Endpoints ---
-app.get('/api/reports/sales-summary', async (req: Request<{}, any, any, { fromDate?: string, toDate?: string }>, res: Response) => {
+app.get('/reports/sales-summary', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const { fromDate, toDate } = req.query as { fromDate?: string, toDate?: string };
     if (!fromDate || !toDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(fromDate) || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(toDate)) {
       return res.status(400).json({ success: false, message: 'فرمت تاریخ شروع و پایان (شمسی YYYY/MM/DD) الزامی است.' });
     }
@@ -658,7 +648,7 @@ app.get('/api/reports/sales-summary', async (req: Request<{}, any, any, { fromDa
   }
 });
 
-app.get('/api/reports/debtors', async (req: Request, res: Response) => {
+app.get('/reports/debtors', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const debtors = await getDebtorsList();
     res.json({ success: true, data: debtors });
@@ -668,7 +658,7 @@ app.get('/api/reports/debtors', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/reports/creditors', async (req: Request, res: Response) => {
+app.get('/reports/creditors', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const creditors = await getCreditorsList();
     res.json({ success: true, data: creditors });
@@ -678,9 +668,9 @@ app.get('/api/reports/creditors', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/reports/top-customers', async (req: Request<{}, any, any, { fromDate?: string, toDate?: string }>, res: Response) => {
+app.get('/reports/top-customers', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const { fromDate, toDate } = req.query as { fromDate?: string, toDate?: string };
     if (!fromDate || !toDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(fromDate) || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(toDate)) {
       return res.status(400).json({ success: false, message: 'فرمت تاریخ شروع و پایان (شمسی YYYY/MM/DD) الزامی است.' });
     }
@@ -692,14 +682,14 @@ app.get('/api/reports/top-customers', async (req: Request<{}, any, any, { fromDa
   }
 });
 
-app.get('/api/reports/top-suppliers', async (req: Request<{}, any, any, { fromDate?: string, toDate?: string }>, res: Response) => {
+app.get('/reports/top-suppliers', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const { fromDate, toDate } = req.query as { fromDate?: string, toDate?: string };
      if (!fromDate || !toDate || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(fromDate) || !/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(toDate)) {
       return res.status(400).json({ success: false, message: 'فرمت تاریخ شروع و پایان (شمسی YYYY/MM/DD) الزامی است.' });
     }
-    const fromDateISO = shamsiToISOForAPI(String(fromDate), false);
-    const toDateISO = shamsiToISOForAPI(String(toDate), true);
+    const fromDateISO = shamsiToISO(String(fromDate), false);
+    const toDateISO = shamsiToISO(String(toDate), true);
 
     if (!fromDateISO || !toDateISO) {
       return res.status(400).json({ success: false, message: 'تاریخ ارائه شده نامعتبر است.' });
@@ -714,7 +704,7 @@ app.get('/api/reports/top-suppliers', async (req: Request<{}, any, any, { fromDa
 });
 
 // --- Invoice API Endpoint ---
-app.get('/api/invoice-data/:saleId', async (req: Request<{ saleId: string }>, res: Response) => {
+app.get('/invoice-data/:saleId', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const saleId = parseInt(req.params.saleId, 10);
     if (isNaN(saleId)) {
@@ -732,7 +722,7 @@ app.get('/api/invoice-data/:saleId', async (req: Request<{ saleId: string }>, re
 });
 
 // --- Settings API Endpoints ---
-app.get('/api/settings', async (req: Request, res: Response) => {
+app.get('/settings', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const settings = await getAllSettingsAsObject();
     res.json({ success: true, data: settings });
@@ -742,7 +732,7 @@ app.get('/api/settings', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/settings', async (req: Request<{}, any, Record<string, any>>, res: Response) => {
+app.post('/settings', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const settingsToUpdate = req.body;
     if (typeof settingsToUpdate !== 'object' || settingsToUpdate === null) {
@@ -758,34 +748,34 @@ app.get('/api/settings', async (req: Request<{}, any, Record<string, any>>, res:
   }
 });
 
-const logoUploadErrorHandler: ErrorRequestHandler = (err, req: Request, res: Response, next: NextFunction) => {
-    if (err instanceof MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') {
+const logoUploadErrorHandler: ErrorRequestHandler = (error, req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+    if (error instanceof MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({ success: false, message: 'حجم فایل لوگو بیش از حد مجاز (2MB) است.' });
         }
-        return res.status(400).json({ success: false, message: `خطای آپلود لوگو: ${err.message}` });
-    } else if (err) {
-        return res.status(400).json({ success: false, message: err.message });
+        return res.status(400).json({ success: false, message: `خطای آپلود لوگو: ${error.message}` });
+    } else if (error) { 
+        return res.status(400).json({ success: false, message: error.message });
     }
-    if (!res.headersSent) {
+    if (!res.headersSent) { 
       res.status(500).json({ success: false, message: 'خطای ناشناخته در پردازش آپلود لوگو.' });
     }
 };
 
-app.get('/api/settings/upload-logo', uploadLogo.single('logo'), async (req: Request, res: Response, next: NextFunction) => {
+app.post('/settings/upload-logo', uploadLogo.single('logo'), async (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
   try {
-    if (!req.file) {
+    if (!req.file) { 
       return res.status(400).json({ success: false, message: 'هیچ فایلی برای لوگو انتخاب نشده است.' });
     }
     const currentSettings = await getAllSettingsAsObject();
     const oldLogoPath = currentSettings.store_logo_path;
-    if (oldLogoPath && oldLogoPath !== req.file.filename) {
+    if (oldLogoPath && oldLogoPath !== req.file.filename) { 
         const fullOldPath = join(uploadsDir, oldLogoPath);
         if (fs.existsSync(fullOldPath)) {
             try {
               fs.unlinkSync(fullOldPath);
               console.log("Old logo deleted:", fullOldPath);
-            } catch (unlinkErr: any) {
+            } catch (unlinkErr: any) { 
               console.error("Error deleting old logo:", unlinkErr);
             }
         }
@@ -794,22 +784,22 @@ app.get('/api/settings/upload-logo', uploadLogo.single('logo'), async (req: Requ
     res.json({ success: true, message: 'لوگو با موفقیت آپلود شد.', data: { filePath: `/uploads/${req.file.filename}` } });
   } catch (error: any) {
     console.error("API Error (upload logo):", error);
-    if (req.file && req.file.path) { 
-        fs.unlink(req.file.path, (errFS) => { // Changed err to errFS to avoid conflict
-            if (errFS) console.error("Error deleting orphaned uploaded logo during error handling:", errFS);
+    if (req.file && req.file.path) {
+        fs.unlink(req.file.path, (err) => { 
+            if (err) console.error("Error deleting orphaned uploaded logo during error handling:", err);
         });
     }
    next(error); 
   }
-}, logoUploadErrorHandler);
+}, logoUploadErrorHandler); 
 
 
-app.get('/api/settings/backup', async (req: Request, res: Response) => {
+app.get('/settings/backup', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     res.download(DB_PATH, `kourosh_inventory_backup_${Date.now()}.db`, (err) => {
       if (err) {
         console.error("Error sending DB backup:", err);
-        if (!res.headersSent) {
+        if (!res.headersSent) { 
           res.status(500).json({ success: false, message: "خطای سرور: مشکل در ایجاد فایل پشتیبان." });
         }
       }
@@ -822,15 +812,15 @@ app.get('/api/settings/backup', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/settings/restore', uploadDb.single('dbfile'), async (req: Request, res: Response) => {
+app.post('/settings/restore', uploadDb.single('dbfile'), async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    if (!req.file) {
+    if (!req.file) { 
       return res.status(400).json({ success: false, message: 'هیچ فایل پشتیبانی انتخاب نشده است.' });
     }
     console.log("Attempting to close current DB connection for restore...");
     await closeDbConnection();
     console.log("DB connection closed. Replacing file...");
-    fs.writeFileSync(DB_PATH, req.file.buffer);
+    fs.writeFileSync(DB_PATH, req.file.buffer); 
     console.log("Database file replaced. Attempting to re-initialize...");
     await getDbInstance(true); 
     console.log("Database restored and re-initialized successfully.");
@@ -838,7 +828,7 @@ app.get('/api/settings/restore', uploadDb.single('dbfile'), async (req: Request,
   } catch (error: any) {
     console.error("API Error (restore DB):", error);
     try {
-      console.warn("Restore failed, attempting to re-initialize current DB state (could be old or new file depending on failure point)...");
+      console.warn("Restore failed, attempting to re-initialize current DB state...");
       await getDbInstance(true); 
     } catch (reinitError: any) {
       console.error("CRITICAL: Failed to re-initialize DB after restore error:", reinitError);
@@ -848,7 +838,7 @@ app.get('/api/settings/restore', uploadDb.single('dbfile'), async (req: Request,
 });
 
 // --- User Management API Endpoints ---
-app.get('/api/roles', async (req: Request, res: Response) => {
+app.get('/roles', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const roles = await getAllRoles();
     res.json({ success: true, data: roles });
@@ -858,7 +848,7 @@ app.get('/api/roles', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/users', async (req: Request, res: Response) => {
+app.get('/users', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const users = await getAllUsersWithRoles();
     res.json({ success: true, data: users });
@@ -868,7 +858,7 @@ app.get('/api/users', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/users', async (req: Request<{}, any, { username?: string, password?: string, roleId?: string | number }>, res: Response) => {
+app.post('/users', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { username, password, roleId } = req.body;
     if (!username || !password || !roleId) {
@@ -879,7 +869,7 @@ app.get('/api/users', async (req: Request<{}, any, { username?: string, password
     }
 
     const newUser = await addUserToDb(String(username), String(password), parseInt(String(roleId), 10));
-    const role = await getAsync("SELECT name FROM roles WHERE id = ?", [newUser.roleId]);
+    const role = await getAsync("SELECT name FROM roles WHERE id = ?", [newUser.roleId]); 
     const userResponse = {
         id: newUser.id,
         username: newUser.username,
@@ -898,10 +888,10 @@ app.get('/api/users', async (req: Request<{}, any, { username?: string, password
 });
 
 // --- Dashboard API Endpoint ---
-app.get('/api/dashboard/summary', async (req: Request<{}, any, any, {period?: string}>, res: Response) => {
+app.get('/dashboard/summary', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const period = req.query.period;
-
+    const period = req.query.period as string | undefined;
+        
     const kpis = await getDashboardKPIs();
     const salesChartData = await getDashboardSalesChartData(period || 'monthly');
     const recentActivities = await getDashboardRecentActivities();
@@ -923,24 +913,23 @@ app.get('/api/dashboard/summary', async (req: Request<{}, any, any, {period?: st
 
 const startServer = async () => {
   try {
-    await getDbInstance();
+    await getDbInstance(); 
     console.log("Database initialization successful. Server can now start.");
-    app.listen(3001, () => {
+    app.listen(port, () => {
       console.log(`Backend server listening at http://localhost:${port}`);
     });
   } catch (error: any) {
     console.error("Server failed to start due to database initialization error:", error);
-    process.exit(1);
+    process.exit(1); 
   }
 };
 
 startServer();
 
-// Default error handler - Must be the last app.use() call
-const defaultErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
-  console.error("Unhandled error in Express pipeline:", err);
+// Default error handler (optional, for unhandled errors)
+app.use((err: Error, req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+  console.error("Unhandled error:", err);
   if (!res.headersSent) {
     res.status(500).json({ success: false, message: "خطای داخلی سرور" });
   }
-};
-app.use(defaultErrorHandler);
+});

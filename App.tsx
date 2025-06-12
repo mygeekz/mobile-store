@@ -8,7 +8,7 @@ import Products from './pages/Products';
 import MobilePhones from './pages/MobilePhones';
 import Sales from './pages/Sales';
 import Customers from './pages/Customers';
-import CustomerDetailPage from './pages/CustomerDetail'; 
+import CustomerDetail from './pages/CustomerDetail'; 
 import Partners from './pages/Partners';
 import PartnerDetail from './pages/PartnerDetail';
 import Reports from './pages/Reports'; // Main Hub
@@ -73,7 +73,7 @@ const App: React.FC = () => {
             <Route path="/mobile-phones" element={<MobilePhones />} />
             <Route path="/sales" element={<Sales />} />
             <Route path="/customers" element={<Customers />} />
-            <Route path="/customers/:id" element={<CustomerDetailPage />} />
+            <Route path="/customers/:id" element={<CustomerDetail />} />
             <Route path="/partners" element={<Partners />} />
             <Route path="/partners/:id" element={<PartnerDetail />} />
             

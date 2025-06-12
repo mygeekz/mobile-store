@@ -7,7 +7,7 @@
     "module": "ESNext",
     "skipLibCheck": true,
     /* Bundler mode */
-    "moduleResolution": "bundler", 
+    "moduleResolution": "bundler", // Changed from NodeNext for Vite frontend
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -22,6 +22,6 @@
     "allowSyntheticDefaultImports": true, 
     "forceConsistentCasingInFileNames": true 
   },
-  "include": ["index.tsx", "types.ts", "constants.ts", "App.tsx", "components", "pages", "vite.config.ts", "tailwind.config.js", "postcss.config.js"],
+  "include": ["src", "index.tsx", "types.ts", "constants.ts", "App.tsx", "components", "pages"],
   "references": [{ "path": "./tsconfig.node.json" }, {"path": "./tsconfig.server.json"}]
 }

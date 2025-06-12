@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 export interface NavItem {
@@ -89,7 +88,7 @@ export interface MobilePhone extends Product, MobilePhoneDetails {
   productName: string; 
 }
 
-export interface NewMobilePhoneData { // Used for frontend form for old structure, if any
+export interface NewMobilePhoneData {
   purchasePrice: number;
   sellingPrice: number;
   brand: string;
@@ -103,7 +102,7 @@ export interface NewMobilePhoneData { // Used for frontend form for old structur
 // --- New Standalone Phone Entry Types for the 'phones' table ---
 export type PhoneStatus = "موجود در انبار" | "فروخته شده" | "مرجوعی";
 
-export interface PhoneEntry { // For frontend display from GET /api/phones
+export interface PhoneEntry {
   id: number;
   model: string;
   color?: string | null;
@@ -116,16 +115,16 @@ export interface PhoneEntry { // For frontend display from GET /api/phones
   salePrice?: number | null;    // This is the sale price for individual phones
   sellerName?: string | null; 
   buyerName?: string | null; 
-  purchaseDate?: string | null; // ISO Date string YYYY-MM-DD from DB
-  saleDate?: string | null;     // ISO Date string YYYY-MM-DD from DB
-  registerDate: string;  // ISO DateTime string from DB
+  purchaseDate?: string | null; 
+  saleDate?: string | null;     
+  registerDate: string;  
   status: PhoneStatus;
   notes?: string | null;
   supplierId?: number | null; 
   supplierName?: string | null; 
 }
 
-export interface NewPhoneEntryData { // For frontend form for new 'phones' table
+export interface NewPhoneEntryData {
   model: string;
   color?: string;
   storage?: string;
@@ -137,33 +136,12 @@ export interface NewPhoneEntryData { // For frontend form for new 'phones' table
   salePrice?: number | string;   
   sellerName?: string; 
   buyerName?: string; 
-  purchaseDate?: string; // Shamsi date string from DatePicker initially
-  saleDate?: string;     // Shamsi date string from DatePicker initially
+  purchaseDate?: string; 
+  saleDate?: string;     
   status?: PhoneStatus; 
   notes?: string;
   supplierId?: number | string | null; 
 }
-
-// Payload for POSTing a new phone to backend
-export interface PhoneEntryPayload {
-  model: string;
-  color?: string | null;
-  storage?: string | null;
-  ram?: string | null;
-  imei: string;
-  batteryHealth?: number | null;
-  condition?: string | null;
-  purchasePrice: number;
-  salePrice?: number | null;
-  sellerName?: string | null;
-  purchaseDate?: string | null; // Expected as ISO Date string (YYYY-MM-DD) by backend
-  saleDate?: string | null;     // Expected as ISO Date string (YYYY-MM-DD) by backend
-  registerDate?: string; // ISO DateTime string (usually set by backend)
-  status?: PhoneStatus | string; // Allow string for flexibility from form
-  notes?: string | null;
-  supplierId?: number | null;
-}
-
 
 // --- Types for Sales Section ---
 export interface SellablePhoneItem {
@@ -205,14 +183,14 @@ export interface SalesTransactionEntry {
   customerFullName?: string | null; 
 }
 
-export interface NewSaleData { // For frontend form
+export interface NewSaleData {
   itemType: 'phone' | 'inventory';
   itemId: number;
   quantity: number;
   transactionDate: string; // Shamsi date string from form
   notes?: string;
-  discount?: number | string; // Allow string for input       
-  customerId?: number | string | null; // Allow string for form
+  discount?: number;       
+  customerId?: number | null; 
 }
 
 // --- Types for Customer Management ---
@@ -226,7 +204,7 @@ export interface Customer {
   currentBalance?: number; 
 }
 
-export interface NewCustomerData { // For frontend form
+export interface NewCustomerData {
   fullName: string;
   phoneNumber?: string;
   address?: string;
@@ -236,17 +214,17 @@ export interface NewCustomerData { // For frontend form
 export interface CustomerLedgerEntry {
   id: number;
   customerId: number;
-  transactionDate: string; // ISO date string from DB
+  transactionDate: string; // ISO date string
   description: string;
   debit: number;  
   credit: number; 
   balance: number; 
 }
 
-export interface NewLedgerEntryData { // Used for both customer and partner manual ledger entries (frontend form)
+export interface NewLedgerEntryData { // Used for both customer and partner manual ledger entries
   description: string;
-  debit?: number | string;  // Allow string for input
-  credit?: number | string; // Allow string for input
+  debit?: number;  // For customer: they pay us (credit to their account). For partner: we pay them.
+  credit?: number; // For customer: we charge them (debit to their account). For partner: we receive goods.
   transactionDate?: string; // Shamsi from DatePicker, converted to ISO before backend for ledgers.
 }
 
@@ -272,7 +250,7 @@ export interface Partner {
   currentBalance?: number; // Calculated: positive means we owe them.
 }
 
-export interface NewPartnerData { // For frontend form
+export interface NewPartnerData {
   partnerName: string;
   partnerType: PartnerType | string;
   contactPerson?: string;
@@ -285,7 +263,7 @@ export interface NewPartnerData { // For frontend form
 export interface PartnerLedgerEntry {
   id: number;
   partnerId: number;
-  transactionDate: string; // ISO date string from DB
+  transactionDate: string; // ISO date string
   description: string;
   debit: number;  // We paid the partner (reduces what we owe)
   credit: number; // We received goods/services from partner (increases what we owe)
@@ -440,58 +418,4 @@ export interface NewUserFormData {
   username: string;
   password?: string; // Optional on edit, required on create
   roleId: number | string; // Allow string for form input, parse to number
-}
-
-// --- Backend specific Payloads ---
-export interface ProductPayload { // For POST/PUT /api/products
-  name: string;
-  purchasePrice: number;
-  sellingPrice: number;
-  stock_quantity: number;
-  categoryId: number | null;
-  supplierId: number | null;
-}
-
-export interface SaleDataPayload { // For POST /api/sales
-  itemType: 'phone' | 'inventory';
-  itemId: number;
-  quantity: number;
-  transactionDate: string; // Shamsi date YYYY/MM/DD
-  customerId?: number | null;
-  notes?: string | null;
-  discount?: number;
-}
-
-export interface CustomerPayload { // For POST/PUT /api/customers
-  fullName: string;
-  phoneNumber?: string | null;
-  address?: string | null;
-  notes?: string | null;
-}
-
-export interface LedgerEntryPayload { // For POST /api/customers/:id/ledger and /api/partners/:id/ledger
-    description: string;
-    debit?: number;
-    credit?: number;
-    transactionDate: string; // ISO DateTime string
-}
-export interface PartnerPayload { // For POST/PUT /api/partners
-  partnerName: string;
-  partnerType: string;
-  contactPerson?: string | null;
-  phoneNumber?: string | null;
-  email?: string | null;
-  address?: string | null;
-  notes?: string | null;
-}
-
-export interface OldMobilePhonePayload { // For old endpoint, if used
-    purchasePrice: number;
-    sellingPrice: number;
-    brand: string;
-    model: string;
-    color?: string;
-    storage?: number;
-    ram?: number;
-    imei: string;
 }

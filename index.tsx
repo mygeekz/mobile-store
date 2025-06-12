@@ -1,10 +1,9 @@
-import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { HashRouter } from 'react-router-dom';
 // If you plan to use Tailwind via PostCSS (recommended for Vite), import your main CSS file here:
-import './index.css'; 
+// import './index.css'; 
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
