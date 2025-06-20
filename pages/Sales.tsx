@@ -1,18 +1,19 @@
+
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import moment from 'jalali-moment';
 
-import { 
-  SellableItemsResponse, 
-  SellableItem, 
-  SellablePhoneItem, 
-  SellableInventoryItem, 
-  NewSaleData, 
+import {
+  SellableItemsResponse,
+  SellableItem,
+  SellablePhoneItem,
+  SellableInventoryItem,
+  NewSaleData,
   SalesTransactionEntry,
   NotificationMessage,
   Customer
 } from '../types';
 import Notification from '../components/Notification';
-import ShamsiDatePicker from '../components/ShamsiDatePicker'; // New
+import ShamsiDatePicker from '../components/ShamsiDatePicker';
 
 // Helper to convert a standard Date object (from DatePicker) to Shamsi YYYY/MM/DD string for backend
 const fromDatePickerToShamsiString = (date: Date | null): string => {
@@ -24,28 +25,30 @@ const Sales: React.FC = () => {
   const [sellableItems, setSellableItems] = useState<SellableItemsResponse>({ phones: [], inventory: [] });
   const [selectedItemDetails, setSelectedItemDetails] = useState<SellableItem | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  
+
   const [transactionDateSelected, setTransactionDateSelected] = useState<Date | null>(new Date());
 
   const initialFormData: NewSaleData = {
-    itemType: 'phone', 
+    itemType: 'phone',
     itemId: 0,
     quantity: 1,
-    transactionDate: fromDatePickerToShamsiString(new Date()),
+    transactionDate: fromDatePickerToShamsiString(new Date()), // Initialize with today's Shamsi date string
     notes: '',
     discount: 0,
     customerId: null,
+    paymentMethod: 'cash', // Added: Default to cash
   };
   const [formData, setFormData] = useState<NewSaleData>(initialFormData);
   const [salesHistory, setSalesHistory] = useState<SalesTransactionEntry[]>([]);
-  
+
   const [isLoadingSellable, setIsLoadingSellable] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
-  
+
   const [notification, setNotification] = useState<NotificationMessage | null>(null);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof NewSaleData | 'selectedItem' | 'discount', string>>>({});
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof NewSaleData | 'selectedItem' | 'discount' | 'transactionDate', string>>>({});
+
 
   const fetchSellableItems = async () => {
     setIsLoadingSellable(true);
@@ -56,9 +59,9 @@ const Sales: React.FC = () => {
         throw new Error(result.message || 'خطا در دریافت لیست کالاهای قابل فروش');
       }
       setSellableItems(result.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message });
+      setNotification({ type: 'error', text: error.message });
     } finally {
       setIsLoadingSellable(false);
     }
@@ -73,9 +76,9 @@ const Sales: React.FC = () => {
         throw new Error(result.message || 'خطا در دریافت تاریخچه فروش');
       }
       setSalesHistory(result.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message });
+      setNotification({ type: 'error', text: error.message });
     } finally {
       setIsLoadingHistory(false);
     }
@@ -90,9 +93,9 @@ const Sales: React.FC = () => {
         throw new Error(result.message || 'خطا در دریافت لیست مشتریان');
       }
       setCustomers(result.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message });
+      setNotification({ type: 'error', text: error.message });
     } finally {
       setIsLoadingCustomers(false);
     }
@@ -103,9 +106,9 @@ const Sales: React.FC = () => {
     fetchSalesHistory();
     fetchCustomers();
   }, []);
-  
+
   useEffect(() => {
-    // Update formData's transactionDate when transactionDateSelected changes
+    // Update formData's transactionDate when transactionDateSelected (Date object) changes
     setFormData(prev => ({ ...prev, transactionDate: fromDatePickerToShamsiString(transactionDateSelected) }));
     if(formErrors.transactionDate) setFormErrors(prev => ({...prev, transactionDate: undefined}));
   }, [transactionDateSelected]);
@@ -129,7 +132,7 @@ const Sales: React.FC = () => {
     } else if (type === 'inventory') {
       item = sellableItems.inventory.find(p => p.id === id);
     }
-    
+
     setSelectedItemDetails(item || null);
     if (item) {
       setFormData(prev => ({
@@ -145,7 +148,7 @@ const Sales: React.FC = () => {
 
   const handleFormInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === "quantity" && selectedItemDetails?.type === 'inventory') {
         const numValue = parseInt(value, 10);
         if (isNaN(numValue) || numValue <= 0) {
@@ -163,6 +166,8 @@ const Sales: React.FC = () => {
         setFormErrors(prev => ({ ...prev, discount: undefined }));
     } else if (name === "customerId") {
         setFormData(prev => ({ ...prev, customerId: value ? parseInt(value, 10) : null }));
+    } else if (name === "paymentMethod") {
+        setFormData(prev => ({ ...prev, paymentMethod: value as 'cash' | 'credit' }));
     }
      else {
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -174,7 +179,7 @@ const Sales: React.FC = () => {
   };
 
   const validateSaleForm = (): boolean => {
-    const errors: Partial<Record<keyof NewSaleData | 'selectedItem' | 'discount', string>> = {};
+    const errors: Partial<Record<keyof NewSaleData | 'selectedItem' | 'discount' | 'transactionDate', string>> = {};
     if (!selectedItemDetails || formData.itemId === 0) {
         errors.selectedItem = "لطفاً یک کالا برای فروش انتخاب کنید.";
     }
@@ -212,10 +217,11 @@ const Sales: React.FC = () => {
       itemType: formData.itemType,
       itemId: formData.itemId,
       quantity: selectedItemDetails?.type === 'phone' ? 1 : formData.quantity,
-      transactionDate: formData.transactionDate.trim(), 
+      transactionDate: formData.transactionDate.trim(),
       notes: formData.notes?.trim() || undefined,
       discount: typeof formData.discount === 'number' ? formData.discount : 0,
       customerId: formData.customerId,
+      paymentMethod: formData.paymentMethod, // Added
     };
 
     try {
@@ -235,15 +241,15 @@ const Sales: React.FC = () => {
       setFormErrors({});
       await fetchSellableItems();
       await fetchSalesHistory();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message });
+      setNotification({ type: 'error', text: error.message });
     } finally {
       setIsSubmittingSale(false);
     }
   };
-  
-  const subTotal = selectedItemDetails 
+
+  const subTotal = selectedItemDetails
     ? selectedItemDetails.price * (selectedItemDetails.type === 'phone' ? 1 : formData.quantity || 0)
     : 0;
   const currentDiscount = typeof formData.discount === 'number' ? formData.discount : 0;
@@ -259,9 +265,9 @@ const Sales: React.FC = () => {
     return price.toLocaleString('fa-IR') + ' تومان';
   };
 
-  const inputClass = (hasError: boolean, isSelect = false) => 
+  const inputClass = (hasError: boolean, isSelect = false) =>
     `w-full p-2.5 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm text-right ${isSelect ? 'bg-white ' : ''}${hasError ? 'border-red-500 ring-red-300' : 'border-gray-300'}`;
-  
+
   const labelClass = "block text-sm font-medium text-gray-700 mb-1";
 
   return (
@@ -310,7 +316,7 @@ const Sales: React.FC = () => {
                     <ShamsiDatePicker
                       id="transactionDatePicker"
                       selectedDate={transactionDateSelected}
-                      onDateChange={(date) => setTransactionDateSelected(date)}
+                      onDateChange={setTransactionDateSelected}
                       inputClassName={inputClass(!!formErrors.transactionDate)}
                     />
                     {formErrors.transactionDate && <p className="mt-1 text-xs text-red-600">{formErrors.transactionDate}</p>}
@@ -344,7 +350,7 @@ const Sales: React.FC = () => {
                         type="number"
                         id="discount"
                         name="discount"
-                        value={formData.discount === 0 && !formErrors.discount ? '' : formData.discount}
+                        value={formData.discount === 0 && !formErrors.discount ? '' : String(formData.discount)}
                         onChange={handleFormInputChange}
                         min="0"
                         className={inputClass(!!formErrors.discount)}
@@ -353,12 +359,12 @@ const Sales: React.FC = () => {
                     {formErrors.discount && <p className="mt-1 text-xs text-red-600">{formErrors.discount}</p>}
                    </div>
                 </div>
-                
+
                 <div className="p-3 bg-indigo-50 rounded-lg text-indigo-800 text-sm space-y-1">
                     <p><strong>کالای انتخاب شده:</strong> {selectedItemDetails.name}</p>
                     <p><strong>قیمت واحد:</strong> {formatPrice(selectedItemDetails.price)}</p>
                     <p><strong>تعداد:</strong> {(selectedItemDetails.type === 'phone' ? 1 : formData.quantity || 0).toLocaleString('fa-IR')}</p>
-                    { (typeof formData.discount === 'number' && formData.discount > 0) && 
+                    { (typeof formData.discount === 'number' && formData.discount > 0) &&
                         <p><strong>تخفیف:</strong> {formatPrice(formData.discount)}</p>
                     }
                     <p className="font-bold text-base"><strong>مبلغ کل نهایی:</strong> {formatPrice(calculatedTotalPrice)}</p>
@@ -385,6 +391,35 @@ const Sales: React.FC = () => {
                   {formErrors.customerId && <p className="mt-1 text-xs text-red-600">{formErrors.customerId}</p>}
                 </div>
 
+                {/* Payment Method Radio Buttons */}
+                <div>
+                  <span className={labelClass}>نحوه پرداخت <span className="text-red-500">*</span></span>
+                  <div className="mt-2 flex space-x-4 space-x-reverse">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="cash"
+                        checked={formData.paymentMethod === 'cash'}
+                        onChange={handleFormInputChange}
+                        className="form-radio h-4 w-4 text-indigo-600 ml-2"
+                      />
+                      <span className="text-sm text-gray-700">نقدی</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="credit"
+                        checked={formData.paymentMethod === 'credit'}
+                        onChange={handleFormInputChange}
+                        className="form-radio h-4 w-4 text-indigo-600 ml-2"
+                      />
+                      <span className="text-sm text-gray-700">اعتباری / نسیه</span>
+                    </label>
+                  </div>
+                </div>
+
 
                 <div>
                   <label htmlFor="notes" className={labelClass}>یادداشت</label>
@@ -392,7 +427,7 @@ const Sales: React.FC = () => {
                     id="notes"
                     name="notes"
                     rows={3}
-                    value={formData.notes}
+                    value={formData.notes || ''}
                     onChange={handleFormInputChange}
                     className={inputClass(!!formErrors.notes)}
                   ></textarea>
@@ -414,8 +449,8 @@ const Sales: React.FC = () => {
       <div className="bg-white rounded-xl shadow-lg">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800">تاریخچه فروش</h3>
-          <button 
-            onClick={fetchSalesHistory} 
+          <button
+            onClick={fetchSalesHistory}
             disabled={isLoadingHistory || isSubmittingSale}
             className="text-sm text-indigo-600 font-medium hover:text-indigo-800 disabled:text-gray-400 transition-colors"
           >
@@ -440,6 +475,7 @@ const Sales: React.FC = () => {
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">تخفیف</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">مبلغ کل نهایی</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">مشتری</th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">نحوه پرداخت</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">یادداشت</th>
                 </tr>
               </thead>
@@ -454,6 +490,7 @@ const Sales: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">{formatPrice(sale.discount)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">{formatPrice(sale.totalPrice)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{sale.customerFullName || (sale.customerId ? 'مشتری حذف شده' : 'مهمان')}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.paymentMethod === 'cash' ? 'نقدی' : 'اعتباری'}</td>
                     <td className="px-6 py-4 whitespace-pre-wrap text-xs text-gray-500 max-w-xs truncate hover:whitespace-normal hover:max-w-none" title={sale.notes || ''}>{sale.notes || '-'}</td>
                   </tr>
                 ))}

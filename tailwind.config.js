@@ -1,29 +1,29 @@
-
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
-  './index.html',
-  './components/**/*.{js,ts,jsx,tsx}',
-  './pages/**/*.{js,ts,jsx,tsx}',
-  './App.tsx',
-],
-
+    "./index.html",
+    // مسیرهای دقیق برای اسکن فایل‌های شما
+    "./App.tsx",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./layouts/**/*.{js,ts,jsx,tsx}",
+    "./contexts/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Vazirmatn', 'Tahoma', 'sans-serif'],
+        vazir: ['Vazirmatn', 'sans-serif'],
       },
       colors: {
-        indigo: {
-          50: '#EEF2FF', 100: '#E0E7FF', 200: '#C7D2FE', 300: '#A5B4FC',
-          400: '#818CF8', 500: '#6366F1', 600: '#4F46E5', 700: '#4338CA',
-          800: '#3730A3', 900: '#312E81',
-        },
-      },
-      screens: {
-        'print': {'raw': 'print'},
+        'glass-edge': 'rgba(255, 255, 255, 0.15)',
+        'glass-bg': 'rgba(255, 255, 255, 0.1)',
+        'glass-sidebar-bg': 'rgba(30, 41, 59, 0.6)',
+        'glass-header-bg': 'rgba(30, 41, 59, 0.7)',
+        'primary': '#4f46e5',
+        'secondary': '#10b981',
+        'accent': '#ec4899',
       }
-    }
+    },
   },
   plugins: [],
 }

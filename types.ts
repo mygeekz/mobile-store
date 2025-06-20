@@ -13,9 +13,9 @@ export interface StatCardData {
   icon: string;
   iconBgColor: string;
   iconTextColor: string;
-  trendPercentage: number;
-  trendDirection: 'up' | 'down';
-  trendText: string; // Persian
+  trendPercentage?: number; // Made optional
+  trendDirection?: 'up' | 'down'; // Made optional
+  trendText: string; // Persian - Can be a static description or dynamic
 }
 
 export type TransactionStatus = 'تکمیل شده' | 'در حال پردازش' | 'در انتظار';
@@ -88,7 +88,7 @@ export interface MobilePhone extends Product, MobilePhoneDetails {
   productName: string; 
 }
 
-export interface NewMobilePhoneData {
+export interface NewMobilePhoneData { // Used for frontend form for old structure, if any
   purchasePrice: number;
   sellingPrice: number;
   brand: string;
@@ -100,9 +100,9 @@ export interface NewMobilePhoneData {
 }
 
 // --- New Standalone Phone Entry Types for the 'phones' table ---
-export type PhoneStatus = "موجود در انبار" | "فروخته شده" | "مرجوعی";
+export type PhoneStatus = "موجود در انبار" | "فروخته شده" | "مرجوعی" | "فروخته شده (قسطی)";
 
-export interface PhoneEntry {
+export interface PhoneEntry { // For frontend display from GET /api/phones
   id: number;
   model: string;
   color?: string | null;
@@ -115,16 +115,16 @@ export interface PhoneEntry {
   salePrice?: number | null;    // This is the sale price for individual phones
   sellerName?: string | null; 
   buyerName?: string | null; 
-  purchaseDate?: string | null; 
-  saleDate?: string | null;     
-  registerDate: string;  
+  purchaseDate?: string | null; // ISO Date string YYYY-MM-DD from DB
+  saleDate?: string | null;     // ISO Date string YYYY-MM-DD from DB
+  registerDate: string;  // ISO DateTime string from DB
   status: PhoneStatus;
   notes?: string | null;
   supplierId?: number | null; 
   supplierName?: string | null; 
 }
 
-export interface NewPhoneEntryData {
+export interface NewPhoneEntryData { // For frontend form for new 'phones' table
   model: string;
   color?: string;
   storage?: string;
@@ -136,12 +136,33 @@ export interface NewPhoneEntryData {
   salePrice?: number | string;   
   sellerName?: string; 
   buyerName?: string; 
-  purchaseDate?: string; 
-  saleDate?: string;     
+  purchaseDate?: string; // Shamsi date string from DatePicker initially
+  saleDate?: string;     // Shamsi date string from DatePicker initially
   status?: PhoneStatus; 
   notes?: string;
   supplierId?: number | string | null; 
 }
+
+// Payload for POSTing a new phone to backend
+export interface PhoneEntryPayload {
+  model: string;
+  color?: string | null;
+  storage?: string | null;
+  ram?: string | null;
+  imei: string;
+  batteryHealth?: number | null;
+  condition?: string | null;
+  purchasePrice: number;
+  salePrice?: number | null;
+  sellerName?: string | null;
+  purchaseDate?: string | null; // Expected as ISO Date string (YYYY-MM-DD) by backend
+  saleDate?: string | null;     // Expected as ISO Date string (YYYY-MM-DD) by backend
+  registerDate?: string; // ISO DateTime string (usually set by backend)
+  status?: PhoneStatus | string; // Allow string for flexibility from form
+  notes?: string | null;
+  supplierId?: number | null;
+}
+
 
 // --- Types for Sales Section ---
 export interface SellablePhoneItem {
@@ -181,16 +202,18 @@ export interface SalesTransactionEntry {
   notes?: string | null;
   customerId?: number | null; 
   customerFullName?: string | null; 
+  paymentMethod?: 'cash' | 'credit'; // Added
 }
 
-export interface NewSaleData {
+export interface NewSaleData { // For frontend form
   itemType: 'phone' | 'inventory';
   itemId: number;
   quantity: number;
   transactionDate: string; // Shamsi date string from form
   notes?: string;
-  discount?: number;       
-  customerId?: number | null; 
+  discount?: number | string; // Allow string for input       
+  customerId?: number | string | null; // Allow string for form
+  paymentMethod: 'cash' | 'credit'; // Added
 }
 
 // --- Types for Customer Management ---
@@ -204,7 +227,7 @@ export interface Customer {
   currentBalance?: number; 
 }
 
-export interface NewCustomerData {
+export interface NewCustomerData { // For frontend form
   fullName: string;
   phoneNumber?: string;
   address?: string;
@@ -214,17 +237,17 @@ export interface NewCustomerData {
 export interface CustomerLedgerEntry {
   id: number;
   customerId: number;
-  transactionDate: string; // ISO date string
+  transactionDate: string; // ISO date string from DB
   description: string;
   debit: number;  
   credit: number; 
   balance: number; 
 }
 
-export interface NewLedgerEntryData { // Used for both customer and partner manual ledger entries
+export interface NewLedgerEntryData { // Used for both customer and partner manual ledger entries (frontend form)
   description: string;
-  debit?: number;  // For customer: they pay us (credit to their account). For partner: we pay them.
-  credit?: number; // For customer: we charge them (debit to their account). For partner: we receive goods.
+  debit?: number | string;  // Allow string for input
+  credit?: number | string; // Allow string for input
   transactionDate?: string; // Shamsi from DatePicker, converted to ISO before backend for ledgers.
 }
 
@@ -250,7 +273,7 @@ export interface Partner {
   currentBalance?: number; // Calculated: positive means we owe them.
 }
 
-export interface NewPartnerData {
+export interface NewPartnerData { // For frontend form
   partnerName: string;
   partnerType: PartnerType | string;
   contactPerson?: string;
@@ -263,7 +286,7 @@ export interface NewPartnerData {
 export interface PartnerLedgerEntry {
   id: number;
   partnerId: number;
-  transactionDate: string; // ISO date string
+  transactionDate: string; // ISO date string from DB
   description: string;
   debit: number;  // We paid the partner (reduces what we owe)
   credit: number; // We received goods/services from partner (increases what we owe)
@@ -418,4 +441,155 @@ export interface NewUserFormData {
   username: string;
   password?: string; // Optional on edit, required on create
   roleId: number | string; // Allow string for form input, parse to number
+}
+
+// --- Backend specific Payloads ---
+export interface ProductPayload { // For POST/PUT /api/products
+  name: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  stock_quantity: number;
+  categoryId: number | null;
+  supplierId: number | null;
+}
+
+export interface SaleDataPayload { // For POST /api/sales
+  itemType: 'phone' | 'inventory';
+  itemId: number;
+  quantity: number;
+  transactionDate: string; // Shamsi date YYYY/MM/DD
+  customerId?: number | null;
+  notes?: string | null;
+  discount?: number;
+  paymentMethod: 'cash' | 'credit'; // Added
+}
+
+export interface CustomerPayload { // For POST/PUT /api/customers
+  fullName: string;
+  phoneNumber?: string | null;
+  address?: string | null;
+  notes?: string | null;
+}
+
+export interface LedgerEntryPayload { // For POST /api/customers/:id/ledger and /api/partners/:id/ledger
+    description: string;
+    debit?: number;
+    credit?: number;
+    transactionDate: string; // ISO DateTime string
+}
+export interface PartnerPayload { // For POST/PUT /api/partners
+  partnerName: string;
+  partnerType: string;
+  contactPerson?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+  address?: string | null;
+  notes?: string | null;
+}
+
+export interface OldMobilePhonePayload { // For old endpoint, if used
+    purchasePrice: number;
+    sellingPrice: number;
+    brand: string;
+    model: string;
+    color?: string;
+    storage?: number;
+    ram?: number;
+    imei: string;
+}
+
+// --- Types for Installment Sales ---
+export type CheckStatus = "در جریان وصول" | "وصول شده" | "برگشت خورده" | "نزد مشتری" | "باطل شده";
+export type InstallmentPaymentStatus = "پرداخت نشده" | "پرداخت شده" | "دیرکرد";
+export type OverallInstallmentStatus = "در حال پرداخت" | "تکمیل شده" | "معوق";
+
+export interface InstallmentCheckInfo {
+  id?: number; // Optional for new checks before saving
+  checkNumber: string;
+  bankName: string;
+  dueDate: string; // Shamsi Date YYYY/MM/DD from DatePicker, stored as Shamsi
+  amount: number;
+  status: CheckStatus;
+}
+
+export interface InstallmentPaymentRecord {
+  id?: number; // Optional
+  installmentNumber: number;
+  dueDate: string; // Shamsi Date YYYY/MM/DD
+  amountDue: number;
+  paymentDate?: string | null; // Shamsi Date YYYY/MM/DD
+  status: InstallmentPaymentStatus;
+}
+
+export interface InstallmentSale {
+  id: number;
+  customerId: number;
+  customerFullName?: string; // For display in list
+  phoneId: number;
+  phoneModel?: string; // For display
+  phoneImei?: string;  // For display
+  actualSalePrice: number;
+  downPayment: number;
+  numberOfInstallments: number;
+  installmentAmount: number;
+  installmentsStartDate: string; // Shamsi Date YYYY/MM/DD
+  totalInstallmentPrice?: number; // Calculated: (numberOfInstallments * installmentAmount) + downPayment
+  remainingAmount?: number;
+  checks: InstallmentCheckInfo[];
+  payments: InstallmentPaymentRecord[];
+  overallStatus: OverallInstallmentStatus;
+  nextDueDate?: string | null; // Shamsi Date YYYY/MM/DD or null if completed
+  notes?: string | null;
+  dateCreated: string; // ISO Date
+}
+
+export interface NewInstallmentSaleData { // For frontend form
+  customerId: number | string | null;
+  phoneId: number | string | null;
+  actualSalePrice: number | string;
+  downPayment: number | string;
+  numberOfInstallments: number | string;
+  installmentAmount: number | string;
+  installmentsStartDate: string; // Shamsi date string from form
+  checks: Omit<InstallmentCheckInfo, 'id' | 'status'>[]; // Checks start without ID and default status
+  notes?: string;
+}
+
+// Payload for POSTing a new installment sale
+export interface InstallmentSalePayload extends Omit<NewInstallmentSaleData, 'customerId' | 'phoneId' | 'actualSalePrice' | 'downPayment' | 'numberOfInstallments' | 'installmentAmount' | 'checks'> {
+  customerId: number;
+  phoneId: number;
+  actualSalePrice: number;
+  downPayment: number;
+  numberOfInstallments: number;
+  installmentAmount: number;
+  checks: InstallmentCheckInfo[]; // Submitted checks will have status 'در جریان وصول' or 'نزد مشتری' initially
+}
+
+export interface InstallmentSaleDetailData extends InstallmentSale {
+  // any additional fields for detail view if needed
+}
+
+// --- Types for Dashboard ---
+export interface DashboardKPIs {
+  totalSalesMonth: number;
+  revenueToday: number;
+  activeProductsCount: number;
+  totalCustomersCount: number;
+}
+
+export interface ActivityItem {
+  id: string; // Unique ID, e.g., "sale-123", "product-45"
+  typeDescription: string; // e.g., "فروش جدید", "محصول جدید"
+  details: string; // e.g., "آیفون ۱۴ به علی رضایی", "کابل شارژ USB-C اضافه شد"
+  timestamp: string; // ISO date string
+  icon: string; // FontAwesome icon class
+  color?: string; // Tailwind text color class, e.g., "text-green-500"
+  link?: string; // Optional path for navigation
+}
+
+export interface DashboardAPIData {
+  kpis: DashboardKPIs;
+  salesChartData: SalesDataPoint[];
+  recentActivities: ActivityItem[];
 }

@@ -1,12 +1,19 @@
-
-import React, { useState, useEffect, FormEvent } from 'react';
-import { Product, NewProduct, Category, NotificationMessage, Partner } from '../types'; // Added Partner
+import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import { Product, NewProduct, Category, NotificationMessage, Partner } from '../types';
 import Notification from '../components/Notification';
+import Modal from '../components/Modal'; 
+import { useSearchParams } from 'react-router-dom';
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]); // State for partners/suppliers
+  const [allPartners, setAllPartners] = useState<Partner[]>([]); 
+  const [suppliers, setSuppliers] = useState<Partner[]>([]);
+
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
 
   const [newProduct, setNewProduct] = useState<NewProduct>({ 
     name: '', 
@@ -14,20 +21,32 @@ const Products: React.FC = () => {
     sellingPrice: 0, 
     stock_quantity: 0,
     categoryId: '',
-    supplierId: '' // Added supplierId
+    supplierId: '' 
   });
+
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newSupplierName, setNewSupplierName] = useState('');
   
   const [formErrors, setFormErrors] = useState<{ name?: string; purchasePrice?: string; sellingPrice?: string; stock_quantity?: string; categoryId?: string; supplierId?: string }>({});
   const [categoryFormError, setCategoryFormError] = useState<string | null>(null);
+  const [supplierFormError, setSupplierFormError] = useState<string | null>(null);
 
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
   const [isFetchingProducts, setIsFetchingProducts] = useState(true);
   const [isLoadingCategory, setIsLoadingCategory] = useState(false);
   const [isFetchingCategories, setIsFetchingCategories] = useState(true);
-  const [isFetchingPartners, setIsFetchingPartners] = useState(true); // Loading state for partners
+  const [isLoadingSupplier, setIsLoadingSupplier] = useState(false);
+  const [isFetchingPartners, setIsFetchingPartners] = useState(true); 
   
   const [notification, setNotification] = useState<NotificationMessage | null>(null);
+
+  // State for Modals
+  const [editingItem, setEditingItem] = useState<{id: number, name: string, type: 'category' | 'supplier'} | null>(null);
+  const [deletingItem, setDeletingItem] = useState<{id: number, name: string, type: 'category' | 'supplier'} | null>(null);
+  const [editItemName, setEditItemName] = useState('');
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+
 
   const fetchProducts = async () => {
     setIsFetchingProducts(true);
@@ -66,27 +85,47 @@ const Products: React.FC = () => {
   const fetchPartners = async () => {
     setIsFetchingPartners(true);
     try {
-      const response = await fetch('/api/partners?partnerType=Supplier'); // Fetch only suppliers ideally
+      const response = await fetch('/api/partners'); 
       const result = await response.json();
       if (!response.ok || !result.success) {
-        throw new Error(result.message || 'خطا در دریافت لیست تامین‌کنندگان');
+        throw new Error(result.message || 'خطا در دریافت لیست همکاران');
       }
-      // Filter for suppliers if backend doesn't do it, or adjust API
-      setPartners(result.data.filter((p: Partner) => p.partnerType === 'Supplier'));
+      setAllPartners(result.data);
+      setSuppliers(result.data.filter((p: Partner) => p.partnerType === 'Supplier'));
     } catch (error) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message || 'یک خطای ناشناخته هنگام دریافت تامین‌کنندگان رخ داد.' });
+      setNotification({ type: 'error', text: (error as Error).message || 'یک خطای ناشناخته هنگام دریافت همکاران رخ داد.' });
     } finally {
       setIsFetchingPartners(false);
     }
   };
 
-
   useEffect(() => {
     fetchProducts();
     fetchCategories();
-    fetchPartners(); // Fetch partners
+    fetchPartners(); 
   }, []);
+  
+  useEffect(() => {
+    const currentSearchQuery = searchParams.get('search') || '';
+    setSearchTerm(currentSearchQuery);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    if (!lowerSearchTerm) {
+      setFilteredProducts(products);
+      return;
+    }
+    const filtered = products.filter(p =>
+      p.name.toLowerCase().includes(lowerSearchTerm) ||
+      (p.categoryName && p.categoryName.toLowerCase().includes(lowerSearchTerm)) ||
+      (p.supplierName && p.supplierName.toLowerCase().includes(lowerSearchTerm)) ||
+      String(p.id).includes(lowerSearchTerm)
+    );
+    setFilteredProducts(filtered);
+  }, [searchTerm, products]);
+
 
   const handleProductInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -106,10 +145,7 @@ const Products: React.FC = () => {
     const { name, value } = e.target;
     const numericFields = ['purchasePrice', 'sellingPrice', 'stock_quantity'];
      if (numericFields.includes(name) && value === '') {
-        setNewProduct(prev => ({
-            ...prev,
-            [name]: 0 
-        }));
+        setNewProduct(prev => ({ ...prev, [name]: 0 }));
     }
   }
 
@@ -134,7 +170,7 @@ const Products: React.FC = () => {
     const productDataToSubmit: NewProduct = {
       ...newProduct,
       categoryId: newProduct.categoryId ? parseInt(String(newProduct.categoryId), 10) : null,
-      supplierId: newProduct.supplierId ? parseInt(String(newProduct.supplierId), 10) : null, // Parse supplierId
+      supplierId: newProduct.supplierId ? parseInt(String(newProduct.supplierId), 10) : null, 
     };
 
     try {
@@ -186,14 +222,144 @@ const Products: React.FC = () => {
       setCategoryFormError(null);
       setNotification({ type: 'success', text: 'دسته‌بندی با موفقیت اضافه شد!' });
       await fetchCategories(); 
+      await fetchProducts(); 
     } catch (error) {
       console.error(error);
-      setNotification({ type: 'error', text: (error as Error).message || 'یک خطای ناشناخته هنگام افزودن دسته‌بندی رخ داد.' });
-      if((error as Error).message.includes('تکراری')) {
-        setCategoryFormError((error as Error).message);
+      const errorMessage = (error as Error).message || 'یک خطای ناشناخته هنگام افزودن دسته‌بندی رخ داد.';
+      setNotification({ type: 'error', text: errorMessage });
+      if(errorMessage.includes('تکراری')) {
+        setCategoryFormError(errorMessage);
       }
     } finally {
       setIsLoadingCategory(false);
+    }
+  };
+
+  const handleSupplierInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewSupplierName(e.target.value);
+    if (supplierFormError) setSupplierFormError(null);
+  };
+
+  const handleSupplierSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newSupplierName.trim()) {
+      setSupplierFormError('نام تامین‌کننده نمی‌تواند خالی باشد.');
+      return;
+    }
+    setIsLoadingSupplier(true);
+    setNotification(null);
+    try {
+      const response = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerName: newSupplierName.trim(), partnerType: 'Supplier' }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'خطا در افزودن تامین‌کننده');
+      }
+      setNewSupplierName('');
+      setSupplierFormError(null);
+      setNotification({ type: 'success', text: 'تامین‌کننده با موفقیت اضافه شد!' });
+      await fetchPartners(); 
+      await fetchProducts();
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error as Error).message || 'یک خطای ناشناخته هنگام افزودن تامین‌کننده رخ داد.';
+      setNotification({ type: 'error', text: errorMessage });
+      if (errorMessage.includes('تکراری') || errorMessage.toLowerCase().includes('unique constraint')) {
+        setSupplierFormError('این نام تامین‌کننده یا شماره تماس (در صورت وارد شدن در آینده) قبلا ثبت شده است.');
+      } else {
+        setSupplierFormError(errorMessage);
+      }
+    } finally {
+      setIsLoadingSupplier(false);
+    }
+  };
+
+  const openEditModal = (item: Category | Partner, type: 'category' | 'supplier') => {
+    setEditingItem({ id: item.id, name: type === 'category' ? (item as Category).name : (item as Partner).partnerName, type });
+    setEditItemName(type === 'category' ? (item as Category).name : (item as Partner).partnerName);
+  };
+
+  const closeEditModal = () => {
+    setEditingItem(null);
+    setEditItemName('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem || !editItemName.trim()) {
+      setNotification({type: 'error', text: 'نام نمی‌تواند خالی باشد.'});
+      return;
+    }
+    setIsSubmittingEdit(true);
+    setNotification(null);
+    try {
+      let response;
+      if (editingItem.type === 'category') {
+        response = await fetch(`/api/categories/${editingItem.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: editItemName.trim() }),
+        });
+      } else { // supplier
+        const originalSupplier = allPartners.find(p => p.id === editingItem.id);
+        if (!originalSupplier) throw new Error("تامین کننده اصلی یافت نشد.");
+        const payload = { ...originalSupplier, partnerName: editItemName.trim() }; // Send full object
+        response = await fetch(`/api/partners/${editingItem.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || `خطا در ویرایش ${editingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'}`);
+      }
+      setNotification({ type: 'success', text: `${editingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'} با موفقیت ویرایش شد.` });
+      closeEditModal();
+      await fetchCategories();
+      await fetchPartners();
+      await fetchProducts();
+    } catch (error) {
+      setNotification({ type: 'error', text: (error as Error).message });
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
+  const openDeleteModal = (item: Category | Partner, type: 'category' | 'supplier') => {
+    setDeletingItem({ id: item.id, name: type === 'category' ? (item as Category).name : (item as Partner).partnerName, type });
+  };
+
+  const closeDeleteModal = () => {
+    setDeletingItem(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    setIsSubmittingDelete(true);
+    setNotification(null);
+    try {
+      let response;
+      if (deletingItem.type === 'category') {
+        response = await fetch(`/api/categories/${deletingItem.id}`, { method: 'DELETE' });
+      } else { // supplier
+        response = await fetch(`/api/partners/${deletingItem.id}`, { method: 'DELETE' });
+      }
+      const result = await response.json(); // Attempt to parse JSON even for DELETE
+      if (!response.ok || (result && result.success === false)) { // Check for explicit failure in JSON
+        throw new Error(result.message || `خطا در حذف ${deletingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'}`);
+      }
+      setNotification({ type: 'success', text: `${deletingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'} با موفقیت حذف شد.` });
+      closeDeleteModal();
+      await fetchCategories();
+      await fetchPartners();
+      await fetchProducts();
+    } catch (error) {
+      setNotification({ type: 'error', text: (error as Error).message });
+    } finally {
+      setIsSubmittingDelete(false);
     }
   };
   
@@ -215,36 +381,88 @@ const Products: React.FC = () => {
     <div className="space-y-8 text-right" dir="rtl">
       <Notification message={notification} onClose={() => setNotification(null)} />
       
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-4">مدیریت دسته‌بندی‌ها</h2>
-        <form onSubmit={handleCategorySubmit} className="space-y-4 sm:flex sm:items-end sm:space-y-0 sm:space-x-3 sm:space-x-reverse">
-          <div className="flex-grow">
-            <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">نام دسته‌بندی جدید</label>
-            <input
-              type="text" id="categoryName" name="categoryName" value={newCategoryName} onChange={handleCategoryInputChange}
-              placeholder="مثال: لوازم جانبی"
-              className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-right ${categoryFormError ? 'border-red-500 ring-red-300' : 'border-gray-300'}`}
-              aria-invalid={!!categoryFormError} aria-describedby={categoryFormError ? "category-name-error" : undefined}
-            />
-            {categoryFormError && <p id="category-name-error" className="mt-1.5 text-xs text-red-600">{categoryFormError}</p>}
-          </div>
-          <button
-            type="submit" disabled={isLoadingCategory || isFetchingCategories}
-            className="w-full sm:w-auto px-6 py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:bg-teal-400 transition-colors"
-          >
-            {isLoadingCategory ? (<><i className="fas fa-spinner fa-spin ml-2"></i>در حال افزودن...</>) : 'افزودن دسته‌بندی'}
-          </button>
-        </form>
-        {isFetchingCategories && <p className="text-sm text-gray-500 mt-3">در حال بارگذاری دسته‌بندی‌ها...</p>}
-        {!isFetchingCategories && categories.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-600">دسته‌بندی‌های موجود:</h3>
-            <ul className="list-disc list-inside pr-5 mt-1 text-sm text-gray-500">
-              {categories.map(cat => <li key={cat.id}>{cat.name}</li>)}
-            </ul>
-          </div>
-        )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Category Management */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-4">مدیریت دسته‌بندی‌ها</h2>
+            <form onSubmit={handleCategorySubmit} className="space-y-4 sm:flex sm:items-end sm:space-y-0 sm:space-x-3 sm:space-x-reverse">
+            <div className="flex-grow">
+                <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">نام دسته‌بندی جدید</label>
+                <input
+                type="text" id="categoryName" name="categoryName" value={newCategoryName} onChange={handleCategoryInputChange}
+                placeholder="مثال: لوازم جانبی"
+                className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-right ${categoryFormError ? 'border-red-500 ring-red-300' : 'border-gray-300'}`}
+                aria-invalid={!!categoryFormError} aria-describedby={categoryFormError ? "category-name-error" : undefined}
+                />
+                {categoryFormError && <p id="category-name-error" className="mt-1.5 text-xs text-red-600">{categoryFormError}</p>}
+            </div>
+            <button
+                type="submit" disabled={isLoadingCategory || isFetchingCategories}
+                className="w-full sm:w-auto px-6 py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:bg-teal-400 transition-colors"
+            >
+                {isLoadingCategory ? (<><i className="fas fa-spinner fa-spin ml-2"></i>در حال افزودن...</>) : 'افزودن دسته‌بندی'}
+            </button>
+            </form>
+            {isFetchingCategories && categories.length === 0 && <p className="text-sm text-gray-500 mt-4">در حال بارگذاری دسته‌بندی‌ها...</p>}
+            {!isFetchingCategories && categories.length === 0 && <p className="text-sm text-gray-500 mt-4">هنوز دسته‌بندی ثبت نشده است.</p>}
+            {!isFetchingCategories && categories.length > 0 && (
+            <div className="mt-6 max-h-60 overflow-y-auto border rounded-lg">
+                <ul className="divide-y divide-gray-200 text-sm text-gray-700">
+                {categories.map(cat => (
+                    <li key={cat.id} className="flex justify-between items-center p-3 hover:bg-gray-50 transition-colors">
+                        <span>{cat.name}</span>
+                        <div className="space-x-2 space-x-reverse">
+                            <button onClick={() => openEditModal(cat, 'category')} className="text-blue-500 hover:text-blue-700 text-sm px-2 py-1 rounded hover:bg-blue-50" title="ویرایش"><i className="fas fa-pen"></i></button>
+                            <button onClick={() => openDeleteModal(cat, 'category')} className="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded hover:bg-red-50" title="حذف"><i className="fas fa-trash"></i></button>
+                        </div>
+                    </li>
+                ))}
+                </ul>
+            </div>
+            )}
+        </div>
+
+        {/* Supplier Management */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-4">مدیریت تامین‌کنندگان</h2>
+          <form onSubmit={handleSupplierSubmit} className="space-y-4 sm:flex sm:items-end sm:space-y-0 sm:space-x-3 sm:space-x-reverse">
+            <div className="flex-grow">
+              <label htmlFor="supplierName" className="block text-sm font-medium text-gray-700 mb-1">نام تامین‌کننده جدید</label>
+              <input
+                type="text" id="supplierName" name="supplierName" value={newSupplierName} onChange={handleSupplierInputChange}
+                placeholder="مثال: شرکت آواژنگ"
+                className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-right ${supplierFormError ? 'border-red-500 ring-red-300' : 'border-gray-300'}`}
+                aria-invalid={!!supplierFormError}
+              />
+              {supplierFormError && <p className="mt-1.5 text-xs text-red-600">{supplierFormError}</p>}
+            </div>
+            <button
+              type="submit" disabled={isLoadingSupplier || isFetchingPartners}
+              className="w-full sm:w-auto px-6 py-3 bg-sky-600 text-white font-medium rounded-lg hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:bg-sky-400 transition-colors"
+            >
+              {isLoadingSupplier ? (<><i className="fas fa-spinner fa-spin ml-2"></i>در حال افزودن...</>) : 'افزودن تامین‌کننده'}
+            </button>
+          </form>
+           {isFetchingPartners && suppliers.length === 0 && <p className="text-sm text-gray-500 mt-4">در حال بارگذاری تامین‌کنندگان...</p>}
+           {!isFetchingPartners && suppliers.length === 0 && <p className="text-sm text-gray-500 mt-4">هنوز تامین‌کننده‌ای (با نوع Supplier) ثبت نشده است.</p>}
+            {!isFetchingPartners && suppliers.length > 0 && (
+            <div className="mt-6 max-h-60 overflow-y-auto border rounded-lg">
+                <ul className="divide-y divide-gray-200 text-sm text-gray-700">
+                {suppliers.map(sup => (
+                    <li key={sup.id} className="flex justify-between items-center p-3 hover:bg-gray-50 transition-colors">
+                        <span>{sup.partnerName}</span>
+                         <div className="space-x-2 space-x-reverse">
+                            <button onClick={() => openEditModal(sup, 'supplier')} className="text-blue-500 hover:text-blue-700 text-sm px-2 py-1 rounded hover:bg-blue-50" title="ویرایش"><i className="fas fa-pen"></i></button>
+                            <button onClick={() => openDeleteModal(sup, 'supplier')} className="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded hover:bg-red-50" title="حذف"><i className="fas fa-trash"></i></button>
+                        </div>
+                    </li>
+                ))}
+                </ul>
+            </div>
+            )}
+        </div>
       </div>
+
 
       <div className="bg-white rounded-xl shadow-lg p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-4">افزودن محصول جدید (کالای انبار)</h2>
@@ -313,11 +531,11 @@ const Products: React.FC = () => {
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
-              {isFetchingCategories && <p className="text-xs text-gray-500 mt-1">درحال بارگذاری دسته‌بندی‌ها...</p>}
+              {isFetchingCategories && <p className="text-xs text-gray-500 mt-1">در حال بارگذاری دسته‌بندی‌ها...</p>}
               {formErrors.categoryId && <p className="mt-1.5 text-xs text-red-600">{formErrors.categoryId}</p>}
             </div>
             <div>
-              <label htmlFor="supplierId" className="block text-sm font-medium text-gray-700 mb-1">تامین‌کننده (اختیاری)</label>
+              <label htmlFor="supplierId" className="block text-sm font-medium text-gray-700 mb-1">تامین‌کننده</label>
               <select
                 id="supplierId" name="supplierId"
                 value={newProduct.supplierId || ''}
@@ -326,11 +544,11 @@ const Products: React.FC = () => {
                 className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-right bg-white ${formErrors.supplierId ? 'border-red-500 ring-red-300' : 'border-gray-300'}`}
               >
                 <option value="">بدون تامین‌کننده</option>
-                {partners.map(partner => (
+                {suppliers.map(partner => ( 
                   <option key={partner.id} value={partner.id}>{partner.partnerName}</option>
                 ))}
               </select>
-              {isFetchingPartners && <p className="text-xs text-gray-500 mt-1">درحال بارگذاری تامین‌کنندگان...</p>}
+              {isFetchingPartners && <p className="text-xs text-gray-500 mt-1">در حال بارگذاری تامین‌کنندگان...</p>}
               {formErrors.supplierId && <p id="supplierId-error" className="mt-1.5 text-xs text-red-600">{formErrors.supplierId}</p>}
             </div>
           </div>
@@ -338,15 +556,27 @@ const Products: React.FC = () => {
             type="submit" disabled={isLoadingProduct || isFetchingProducts || isFetchingCategories || isFetchingPartners}
             className="w-full md:w-auto px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-indigo-400 transition-colors"
           >
-            {isLoadingProduct ? (<><i className="fas fa-spinner fa-spin ml-2"></i>در حال افزودن...</>) : 'افزودن محصول'}
+            {isLoadingProduct ? 'در حال افزودن...' : 'افزودن محصول'}
           </button>
         </form>
       </div>
 
       <div className="bg-white rounded-xl shadow-lg">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row items-center justify-between p-6 border-b border-gray-200 gap-4">
           <h3 className="text-lg font-semibold text-gray-800">لیست محصولات (کالاهای انبار)</h3>
-          <button onClick={() => { fetchProducts(); fetchCategories(); fetchPartners(); }} disabled={isFetchingProducts || isLoadingProduct || isFetchingCategories || isFetchingPartners} className="text-sm text-indigo-600 font-medium hover:text-indigo-800 disabled:text-gray-400 transition-colors">
+           <div className="relative w-full sm:w-64 md:w-80">
+            <input
+              type="text"
+              placeholder="جستجو بر اساس نام، دسته، تامین کننده..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none text-right"
+            />
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+              <i className="fa-solid fa-search text-gray-400"></i>
+            </div>
+          </div>
+          <button onClick={() => { fetchProducts(); fetchCategories(); fetchPartners(); }} disabled={isFetchingProducts || isLoadingProduct || isFetchingCategories || isFetchingPartners || isLoadingSupplier} className="text-sm text-indigo-600 font-medium hover:text-indigo-800 disabled:text-gray-400 transition-colors whitespace-nowrap">
             <i className={`fas fa-sync-alt ml-2 ${(isFetchingProducts || isFetchingCategories || isFetchingPartners) ? 'fa-spin' : ''}`}></i>
             به‌روزرسانی لیست‌ها
           </button>
@@ -356,6 +586,8 @@ const Products: React.FC = () => {
             <div className="p-10 text-center text-gray-500"><i className="fas fa-spinner fa-spin text-3xl mb-3"></i><p>در حال بارگذاری محصولات...</p></div>
           ) : !isFetchingProducts && products.length === 0 ? (
             <div className="p-10 text-center text-gray-500"><i className="fas fa-box-open text-3xl text-gray-400 mb-3"></i><p>محصولی برای نمایش وجود ندارد.</p></div>
+          ) : !isFetchingProducts && filteredProducts.length === 0 && searchTerm ? (
+             <div className="p-10 text-center text-gray-500"><i className="fas fa-search-minus text-3xl text-gray-400 mb-3"></i><p>محصولی با عبارت جستجو شده یافت نشد.</p></div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200 text-right">
               <thead className="bg-gray-100">
@@ -370,7 +602,7 @@ const Products: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {products.map((product) => (
+                {filteredProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-medium text-gray-900">{product.name}</div></td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{product.categoryName || '-'}</td>
@@ -386,6 +618,48 @@ const Products: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingItem && (
+        <Modal title={`ویرایش ${editingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'}: ${editingItem.name}`} onClose={closeEditModal}>
+          <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-4 p-1">
+            <div>
+              <label htmlFor="editItemName" className="block text-sm font-medium text-gray-700 mb-1">نام جدید</label>
+              <input
+                type="text" id="editItemName" value={editItemName} onChange={(e) => setEditItemName(e.target.value)}
+                className="w-full p-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+            <div className="flex justify-end pt-3 space-x-3 space-x-reverse">
+              <button type="button" onClick={closeEditModal} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">انصراف</button>
+              <button type="submit" disabled={isSubmittingEdit} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
+                {isSubmittingEdit ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete Modal */}
+      {deletingItem && (
+        <Modal title={`حذف ${deletingItem.type === 'category' ? 'دسته‌بندی' : 'تامین‌کننده'}`} onClose={closeDeleteModal}>
+          <div className="p-1">
+            <p className="text-sm text-gray-700 mb-4">
+              آیا از حذف "{deletingItem.name}" مطمئن هستید؟ این عمل غیرقابل بازگشت است.
+              {deletingItem.type === 'category' && <span className="block text-xs text-orange-600 mt-1">توجه: محصولاتی که به این دسته‌بندی مرتبط بوده‌اند، بدون دسته‌بندی خواهند شد.</span>}
+              {deletingItem.type === 'supplier' && <span className="block text-xs text-orange-600 mt-1">توجه: محصولاتی که از این تامین‌کننده بوده‌اند، بدون تامین‌کننده خواهند شد. همچنین سوابق مالی این تامین‌کننده (دفتر حساب) حذف خواهد شد.</span>}
+            </p>
+            <div className="flex justify-end pt-3 space-x-3 space-x-reverse">
+              <button onClick={closeDeleteModal} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">انصراف</button>
+              <button onClick={handleConfirmDelete} disabled={isSubmittingDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400">
+                {isSubmittingDelete ? 'در حال حذف...' : 'تایید و حذف'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 };

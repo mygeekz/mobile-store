@@ -32,6 +32,10 @@ const InvoiceDetailPage: React.FC = () => {
         if (!response.ok || !result.success) {
           throw new Error(result.message || 'خطا در دریافت اطلاعات فاکتور');
         }
+        // Ensure logoUrl includes cache-busting query parameter
+        if (result.data && result.data.businessDetails && result.data.businessDetails.logoUrl) {
+          result.data.businessDetails.logoUrl = `${result.data.businessDetails.logoUrl}?t=${new Date().getTime()}`;
+        }
         setInvoiceData(result.data);
       } catch (error) {
         setNotification({ type: 'error', text: (error as Error).message });
@@ -52,19 +56,19 @@ const InvoiceDetailPage: React.FC = () => {
 
   const handleDownloadPDF = async () => {
     if (!invoicePrintRef.current || !invoiceData) return;
-    setNotification({type: 'success', text: 'در حال آماده‌سازی PDF... لطفاً کمی صبر کنید.'})
+    setNotification({type: 'info', text: 'در حال آماده‌سازی PDF... لطفاً کمی صبر کنید.'}) // Changed to info
 
     try {
         const canvas = await html2canvas(invoicePrintRef.current, {
-            scale: 2, // Improve quality
+            scale: 2, 
             useCORS: true,
             logging: false, 
         });
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
-            orientation: 'p', // portrait
-            unit: 'mm', // millimeters
-            format: 'a4', // A4 page size
+            orientation: 'p', 
+            unit: 'mm', 
+            format: 'a4', 
         });
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -73,20 +77,15 @@ const InvoiceDetailPage: React.FC = () => {
         const imgWidth = imgProps.width;
         const imgHeight = imgProps.height;
         
-        // Calculate the aspect ratio
         const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
         
-        // Calculate the new dimensions of the image to fit within the PDF page
         const newImgWidth = imgWidth * ratio;
         const newImgHeight = imgHeight * ratio;
 
-        // Calculate position to center the image (optional)
         const xPos = (pdfWidth - newImgWidth) / 2;
         const yPos = (pdfHeight - newImgHeight) / 2;
         
-        // pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, newImgHeight); // Stretch to width, maintain aspect ratio
         pdf.addImage(imgData, 'PNG', xPos > 0 ? xPos : 0, yPos > 0 ? yPos : 0, newImgWidth, newImgHeight);
-
 
         pdf.save(`فاکتور-${invoiceData.invoiceMetadata.invoiceNumber}.pdf`);
         setNotification({type: 'success', text: 'فاکتور PDF با موفقیت دانلود شد.'})
@@ -143,7 +142,6 @@ const InvoiceDetailPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Invoice Content - A4 like structure */}
       <div ref={invoicePrintRef} id="invoice-content" className="bg-white p-8 md:p-12 shadow-lg rounded-md max-w-4xl mx-auto border border-gray-200 print:shadow-none print:border-none print:m-0 print:p-0">
         <style>
           {`
@@ -153,7 +151,6 @@ const InvoiceDetailPage: React.FC = () => {
             }
           `}
         </style>
-        {/* Header */}
         <header className="flex justify-between items-start pb-6 border-b-2 border-gray-800">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">{businessDetails.name}</h1>
@@ -164,13 +161,19 @@ const InvoiceDetailPage: React.FC = () => {
             {businessDetails.email && <p className="text-sm text-gray-600">ایمیل: <span dir="ltr">{businessDetails.email}</span></p>}
           </div>
           <div className="text-left">
+            {businessDetails.logoUrl && (
+                <img 
+                    src={businessDetails.logoUrl} 
+                    alt={`${businessDetails.name} Logo`} 
+                    className="w-24 h-24 object-contain mb-4 ml-auto" 
+                />
+            )}
             <h2 className="text-2xl font-semibold text-indigo-700">فاکتور فروش</h2>
             <p className="text-sm text-gray-600">شماره فاکتور: <span className="font-medium">{Number(invoiceMetadata.invoiceNumber).toLocaleString('fa-IR')}</span></p>
             <p className="text-sm text-gray-600">تاریخ: <span className="font-medium">{formatDate(invoiceMetadata.transactionDate)}</span></p>
           </div>
         </header>
 
-        {/* Customer Details */}
         <section className="my-8 flex justify-between">
           <div className="w-1/2 pr-4">
              {customerDetails && (
@@ -185,10 +188,8 @@ const InvoiceDetailPage: React.FC = () => {
                  <p className="text-sm text-gray-600 font-medium">فروش به مشتری مهمان</p>
              )}
           </div>
-           {/* Optionally, shipping details if different */}
         </section>
 
-        {/* Line Items Table */}
         <section className="my-8">
           <table className="w-full text-sm">
             <thead className="bg-gray-100 print:bg-gray-100">
@@ -212,7 +213,6 @@ const InvoiceDetailPage: React.FC = () => {
           </table>
         </section>
 
-        {/* Financial Summary */}
         <section className="my-8 flex justify-end">
           <div className="w-full sm:w-1/2 lg:w-1/3">
             <div className="space-y-2 text-sm">
@@ -234,7 +234,6 @@ const InvoiceDetailPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Notes */}
         {notes && (
           <section className="my-8 pt-4 border-t border-gray-200">
             <h4 className="font-semibold text-gray-700 mb-1 text-sm">یادداشت‌ها:</h4>
@@ -242,7 +241,6 @@ const InvoiceDetailPage: React.FC = () => {
           </section>
         )}
 
-        {/* Footer */}
         <footer className="mt-12 pt-6 border-t-2 border-gray-800 text-center">
           <p className="text-sm text-gray-600">از خرید شما متشکریم!</p>
           <p className="text-xs text-gray-500 mt-1">{businessDetails.name} - {businessDetails.cityStateZip}</p>

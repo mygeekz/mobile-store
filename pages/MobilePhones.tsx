@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, FormEvent } from 'react';
 import moment from 'jalali-moment';
 
-import { PhoneEntry, NewPhoneEntryData, NotificationMessage, PhoneStatus, Partner } from '../types';
+import { PhoneEntry, NewPhoneEntryData, NotificationMessage, PhoneStatus, Partner, PhoneEntryPayload } from '../types';
 import Notification from '../components/Notification';
-import ShamsiDatePicker from '../components/ShamsiDatePicker'; // New
+import ShamsiDatePicker from '../components/ShamsiDatePicker';
 import { PHONE_RAM_OPTIONS, PHONE_STORAGE_OPTIONS } from '../constants';
 
 const PHONE_CONDITIONS = ["نو (آکبند)", "در حد نو", "کارکرده", "معیوب"];
@@ -12,24 +13,8 @@ const PHONE_STATUSES: PhoneStatus[] = ["موجود در انبار", "فروخت
 // Converts Date object from DatePicker to ISO YYYY-MM-DD string
 const fromDatePickerToISO = (date: Date | null): string | undefined => {
   if (!date) return undefined;
-  return moment(date).format('YYYY-MM-DD'); 
+  return moment(date).format('YYYY-MM-DD'); // Store as Gregorian ISO date
 };
-
-// Converts ISO date string (from DB) to Date object for DatePicker
-const fromISOToDatePicker = (isoDateString?: string | null): Date | null => {
-  if (!isoDateString) return null;
-  return moment(isoDateString, 'YYYY-MM-DD').toDate();
-};
-
-const toShamsiForDisplay = (gregorianDateString?: string | null, format = 'YYYY/MM/DD HH:mm'): string => {
-  if (!gregorianDateString) return 'نامشخص';
-  try {
-    return moment(gregorianDateString).locale('fa').format(format);
-  } catch (e) {
-    return gregorianDateString; 
-  }
-};
-
 
 const MobilePhonesPage: React.FC = () => {
   const [phones, setPhones] = useState<PhoneEntry[]>([]);
@@ -47,19 +32,17 @@ const MobilePhonesPage: React.FC = () => {
     condition: PHONE_CONDITIONS[0],
     purchasePrice: '',
     salePrice: '',
-    purchaseDate: undefined, 
-    saleDate: undefined,     
     status: PHONE_STATUSES[0],
     notes: '',
     supplierId: ''
   };
   const [newPhone, setNewPhone] = useState<NewPhoneEntryData>(initialNewPhoneState);
-  
+
   const [purchaseDateSelected, setPurchaseDateSelected] = useState<Date | null>(null);
   const [saleDateSelected, setSaleDateSelected] = useState<Date | null>(null);
 
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof NewPhoneEntryData, string>>>({});
-  
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof NewPhoneEntryData | 'purchaseDate' | 'saleDate', string>>>({});
+
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [isFetchingPartners, setIsFetchingPartners] = useState(true);
@@ -69,20 +52,20 @@ const MobilePhonesPage: React.FC = () => {
     setIsFetching(true);
     setNotification(null);
     try {
-      const response = await fetch('/api/phones'); 
+      const response = await fetch('/api/phones');
       const result = await response.json();
       if (!response.ok || !result.success) {
         throw new Error(result.message || 'خطا در دریافت لیست گوشی‌ها');
       }
       setPhones(result.data);
       setFilteredPhones(result.data);
-    } catch (error) {
-      setNotification({ type: 'error', text: (error as Error).message || 'یک خطای ناشناخته هنگام دریافت گوشی‌ها رخ داد.' });
+    } catch (error: any) {
+      setNotification({ type: 'error', text: error.message || 'یک خطای ناشناخته هنگام دریافت گوشی‌ها رخ داد.' });
     } finally {
       setIsFetching(false);
     }
   };
-  
+
   const fetchPartners = async () => {
     setIsFetchingPartners(true);
     try {
@@ -92,8 +75,8 @@ const MobilePhonesPage: React.FC = () => {
         throw new Error(result.message || 'خطا در دریافت لیست تامین‌کنندگان');
       }
       setPartners(result.data.filter((p: Partner) => p.partnerType === 'Supplier'));
-    } catch (error) {
-      setNotification({ type: 'error', text: (error as Error).message || 'یک خطای ناشناخته هنگام دریافت تامین‌کنندگان رخ داد.' });
+    } catch (error: any) {
+      setNotification({ type: 'error', text: error.message || 'یک خطای ناشناخته هنگام دریافت تامین‌کنندگان رخ داد.' });
     } finally {
       setIsFetchingPartners(false);
     }
@@ -110,7 +93,7 @@ const MobilePhonesPage: React.FC = () => {
       setFilteredPhones(phones);
       return;
     }
-    const filtered = phones.filter(p => 
+    const filtered = phones.filter(p =>
       p.model.toLowerCase().includes(lowerSearchTerm) ||
       p.imei.toLowerCase().includes(lowerSearchTerm) ||
       (p.color && p.color.toLowerCase().includes(lowerSearchTerm)) ||
@@ -129,11 +112,11 @@ const MobilePhonesPage: React.FC = () => {
   };
 
   const validateForm = (): boolean => {
-    const errors: Partial<Record<keyof NewPhoneEntryData, string>> = {};
+    const errors: Partial<Record<keyof NewPhoneEntryData | 'purchaseDate' | 'saleDate', string>> = {};
     if (!newPhone.model.trim()) errors.model = 'مدل الزامی است.';
     if (!newPhone.imei.trim()) errors.imei = 'IMEI الزامی است.';
     else if (!/^\d{15,16}$/.test(newPhone.imei.trim())) errors.imei = 'IMEI باید ۱۵ یا ۱۶ رقم باشد.';
-    
+
     if (!String(newPhone.purchasePrice).trim() || isNaN(parseFloat(String(newPhone.purchasePrice))) || parseFloat(String(newPhone.purchasePrice)) < 0) {
       errors.purchasePrice = 'قیمت خرید باید عددی غیرمنفی باشد.';
     } else if (parseFloat(String(newPhone.purchasePrice)) > 0 && !newPhone.supplierId) {
@@ -155,23 +138,31 @@ const MobilePhonesPage: React.FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
     setNotification(null);
 
-    const dataToSubmit: NewPhoneEntryData = {
-      ...newPhone,
+    const dataToSubmit: PhoneEntryPayload = {
+      model: newPhone.model,
+      color: newPhone.color || undefined,
+      storage: newPhone.storage || undefined,
+      ram: newPhone.ram || undefined,
+      imei: newPhone.imei,
+      batteryHealth: newPhone.batteryHealth ? parseInt(String(newPhone.batteryHealth), 10) : undefined,
+      condition: newPhone.condition || undefined,
       purchasePrice: parseFloat(String(newPhone.purchasePrice)),
       salePrice: newPhone.salePrice ? parseFloat(String(newPhone.salePrice)) : undefined,
-      batteryHealth: newPhone.batteryHealth ? parseInt(String(newPhone.batteryHealth), 10) : undefined,
-      status: newPhone.status || PHONE_STATUSES[0], 
+      sellerName: newPhone.sellerName || undefined,
       purchaseDate: fromDatePickerToISO(purchaseDateSelected),
       saleDate: fromDatePickerToISO(saleDateSelected),
+      status: newPhone.status || PHONE_STATUSES[0],
+      notes: newPhone.notes || undefined,
       supplierId: newPhone.supplierId ? parseInt(String(newPhone.supplierId), 10) : null,
+      registerDate: new Date().toISOString() // Set on backend as well, but good to have
     };
 
     try {
-      const response = await fetch('/api/phones', { 
+      const response = await fetch('/api/phones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSubmit),
@@ -185,9 +176,9 @@ const MobilePhonesPage: React.FC = () => {
       setSaleDateSelected(null);
       setFormErrors({});
       setNotification({ type: 'success', text: 'گوشی با موفقیت اضافه شد!' });
-      await fetchPhones(); 
-    } catch (error) {
-      const errorMessage = (error as Error).message || 'یک خطای ناشناخته هنگام افزودن گوشی رخ داد.';
+      await fetchPhones();
+    } catch (error: any) {
+      const errorMessage = error.message || 'یک خطای ناشناخته هنگام افزودن گوشی رخ داد.';
       setNotification({ type: 'error', text: errorMessage });
       if (errorMessage.includes('IMEI تکراری')) {
         setFormErrors(prev => ({ ...prev, imei: 'این شماره IMEI قبلا ثبت شده است.' }));
@@ -196,12 +187,15 @@ const MobilePhonesPage: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
+
   const formatDateForDisplay = (isoDate: string | undefined | null, includeTime = false) => {
     if (!isoDate) return 'نامشخص';
     const format = includeTime ? 'YYYY/MM/DD HH:mm' : 'YYYY/MM/DD';
-    return toShamsiForDisplay(isoDate, format);
+    const momentDate = moment(isoDate); 
+    if (!momentDate.isValid()) return isoDate; 
+    return momentDate.locale('fa').format(format);
   };
+
 
   const formatPrice = (price: number | undefined | null) => {
     if (price === undefined || price === null) return '-';
@@ -217,15 +211,15 @@ const MobilePhonesPage: React.FC = () => {
     }
   };
 
-  const inputClass = (fieldName?: keyof NewPhoneEntryData, isSelect = false) => 
+  const inputClass = (fieldName?: keyof NewPhoneEntryData | 'purchaseDate' | 'saleDate', isSelect = false) =>
     `w-full p-2.5 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm text-right ${isSelect ? 'bg-white ' : ''}${fieldName && formErrors[fieldName] ? 'border-red-500 ring-red-300' : 'border-gray-300'}`;
-  
+
   const labelClass = "block text-sm font-medium text-gray-700 mb-1";
 
   return (
     <div className="space-y-6 text-right" dir="rtl">
       <Notification message={notification} onClose={() => setNotification(null)} />
-      
+
       <div className="bg-white rounded-xl shadow-lg p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-4">افزودن گوشی موبایل جدید</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -248,7 +242,7 @@ const MobilePhonesPage: React.FC = () => {
             </div>
             <div>
               <label htmlFor="color" className={labelClass}>رنگ</label>
-              <input type="text" id="color" name="color" value={newPhone.color} onChange={handleInputChange} className={inputClass('color')} placeholder="مثال: آبی تیتانیوم"/>
+              <input type="text" id="color" name="color" value={newPhone.color || ''} onChange={handleInputChange} className={inputClass('color')} placeholder="مثال: آبی تیتانیوم"/>
             </div>
             <div>
               <label htmlFor="storage" className={labelClass}>حافظه داخلی</label>
@@ -269,8 +263,8 @@ const MobilePhonesPage: React.FC = () => {
             </div>
             <div>
               <label htmlFor="supplierId" className={labelClass}>تامین‌کننده</label>
-              <select 
-                id="supplierId" name="supplierId" value={newPhone.supplierId || ''} 
+              <select
+                id="supplierId" name="supplierId" value={newPhone.supplierId || ''}
                 onChange={handleInputChange} className={inputClass('supplierId', true)}
                 disabled={isFetchingPartners}
               >
@@ -297,7 +291,7 @@ const MobilePhonesPage: React.FC = () => {
             </div>
              <div>
               <label htmlFor="salePrice" className={labelClass}>قیمت فروش (تومان)</label>
-              <input type="number" id="salePrice" name="salePrice" value={newPhone.salePrice} onChange={handleInputChange} className={inputClass('salePrice')} placeholder="مثال: ۳۸۵۰۰۰۰۰" min="0"/>
+              <input type="number" id="salePrice" name="salePrice" value={newPhone.salePrice || ''} onChange={handleInputChange} className={inputClass('salePrice')} placeholder="مثال: ۳۸۵۰۰۰۰۰" min="0"/>
               {formErrors.salePrice && <p className="mt-1 text-xs text-red-600">{formErrors.salePrice}</p>}
             </div>
              <div>
@@ -320,7 +314,7 @@ const MobilePhonesPage: React.FC = () => {
           </div>
           <div className="md:col-span-2 lg:col-span-3">
             <label htmlFor="notes" className={labelClass}>یادداشت‌ها</label>
-            <textarea id="notes" name="notes" value={newPhone.notes} onChange={handleInputChange} rows={3} className={inputClass('notes')} placeholder="جزئیات بیشتر، لوازم همراه و ..."></textarea>
+            <textarea id="notes" name="notes" value={newPhone.notes || ''} onChange={handleInputChange} rows={3} className={inputClass('notes')} placeholder="جزئیات بیشتر، لوازم همراه و ..."></textarea>
           </div>
 
           <button type="submit" disabled={isLoading || isFetching || isFetchingPartners}
@@ -346,7 +340,7 @@ const MobilePhonesPage: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {isFetching ? (
           <div className="p-10 text-center text-gray-500"><i className="fas fa-spinner fa-spin text-3xl mb-3"></i><p>در حال بارگذاری گوشی‌ها...</p></div>
         ) : phones.length === 0 ? (
@@ -364,7 +358,7 @@ const MobilePhonesPage: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mb-2" dir="ltr">IMEI: {phone.imei}</p>
-                
+
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-3">
                   <p><strong className="text-gray-600">رنگ:</strong> {phone.color || '-'}</p>
                   <p><strong className="text-gray-600">حافظه:</strong> {phone.storage || '-'}</p>

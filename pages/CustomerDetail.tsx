@@ -1,18 +1,17 @@
+
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import moment from 'jalali-moment';
 
-import { 
-  CustomerDetailsPageData, 
-  NotificationMessage, 
-  NewCustomerData, 
-  CustomerLedgerEntry,
+import {
+  CustomerDetailsPageData,
+  NotificationMessage,
+  NewCustomerData,
   NewLedgerEntryData,
-  SalesTransactionEntry
 } from '../types';
 import Notification from '../components/Notification';
 import Modal from '../components/Modal';
-import ShamsiDatePicker from '../components/ShamsiDatePicker'; // New
+import ShamsiDatePicker from '../components/ShamsiDatePicker';
 
 const toShamsiForDisplay = (isoDateString?: string | null, format = 'YYYY/MM/DD HH:mm'): string => {
   if (!isoDateString) return 'نامشخص';
@@ -20,25 +19,20 @@ const toShamsiForDisplay = (isoDateString?: string | null, format = 'YYYY/MM/DD 
     return moment(isoDateString).locale('fa').format(format);
   } catch (e) {
     console.warn("Date conversion to Shamsi failed for:", isoDateString, e);
-    return isoDateString; 
+    return isoDateString;
   }
 };
 
-// Helper to convert a standard Date object (from DatePicker) to Shamsi YYYY/MM/DD string for backend
-const fromDatePickerToShamsiString = (date: Date | null): string | undefined => {
-  if (!date) return undefined; 
-  return moment(date).locale('fa').format('YYYY/MM/DD');
-};
-// Converts Shamsi YYYY/MM/DD string to ISO YYYY-MM-DD string for backend ledger
-const fromShamsiStringToISO = (shamsiDateString?: string): string | undefined => {
-  if (!shamsiDateString) return undefined;
-  return moment(shamsiDateString, 'jYYYY/jMM/jDD').isValid() ? moment(shamsiDateString, 'jYYYY/jMM/jDD').format('YYYY-MM-DD') : undefined;
+// Helper to convert a standard Date object (from DatePicker) to ISO YYYY-MM-DD string for backend ledger
+const fromDatePickerToISOString = (date: Date | null): string | undefined => {
+  if (!date) return undefined;
+  return moment(date).format('YYYY-MM-DD'); // Store as Gregorian ISO date for ledger
 };
 
 
 const formatLedgerCurrency = (amount?: number, type?: 'debit' | 'credit' | 'balance') => {
   if (amount === undefined || amount === null) return '۰ تومان';
-  
+
   let amountStr = Math.abs(amount).toLocaleString('fa-IR') + ' تومان';
   let color = 'text-gray-700';
 
@@ -57,7 +51,7 @@ const formatLedgerCurrency = (amount?: number, type?: 'debit' | 'credit' | 'bala
   } else if (type === 'credit' && amount > 0) {
     color = 'text-green-600';
   }
-  
+
   return <span className={color}>{amountStr}</span>;
 };
 
@@ -65,7 +59,7 @@ const formatLedgerCurrency = (amount?: number, type?: 'debit' | 'credit' | 'bala
 const CustomerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
+
   const [customerData, setCustomerData] = useState<CustomerDetailsPageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState<NotificationMessage | null>(null);
@@ -76,10 +70,10 @@ const CustomerDetailPage: React.FC = () => {
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
-  const initialLedgerEntry: NewLedgerEntryData = { description: '', debit: 0, credit: 0, transactionDate: fromDatePickerToShamsiString(new Date()) };
+  const initialLedgerEntry: NewLedgerEntryData = { description: '', debit: 0, credit: 0 }; // transactionDate handled by ledgerDateSelected
   const [newLedgerEntry, setNewLedgerEntry] = useState<NewLedgerEntryData>(initialLedgerEntry);
   const [ledgerDateSelected, setLedgerDateSelected] = useState<Date|null>(new Date());
-  const [ledgerFormErrors, setLedgerFormErrors] = useState<Partial<NewLedgerEntryData & { amountType?: string }>>({});
+  const [ledgerFormErrors, setLedgerFormErrors] = useState<Partial<NewLedgerEntryData & { amountType?: string, transactionDate?: string }>>({});
   const [isSubmittingLedger, setIsSubmittingLedger] = useState(false);
   const [transactionType, setTransactionType] = useState<'debit' | 'credit'>('credit');
 
@@ -93,9 +87,9 @@ const CustomerDetailPage: React.FC = () => {
         throw new Error(result.message || 'خطا در دریافت اطلاعات مشتری');
       }
       setCustomerData(result.data);
-    } catch (error) {
-      setNotification({ type: 'error', text: (error as Error).message });
-      if ((error as Error).message.includes('یافت نشد')) {
+    } catch (error: any) {
+      setNotification({ type: 'error', text: error.message });
+      if (error.message.includes('یافت نشد')) {
         setTimeout(() => navigate('/customers'), 2000);
       }
     } finally {
@@ -105,13 +99,7 @@ const CustomerDetailPage: React.FC = () => {
 
   useEffect(() => {
     fetchCustomerDetails();
-  }, [id]);
-  
-  useEffect(() => {
-    // Update newLedgerEntry's transactionDate when ledgerDateSelected changes
-    setNewLedgerEntry(prev => ({ ...prev, transactionDate: fromDatePickerToShamsiString(ledgerDateSelected) }));
-    if(ledgerFormErrors.transactionDate) setLedgerFormErrors(prev => ({...prev, transactionDate: undefined}));
-  }, [ledgerDateSelected]);
+  }, [id, navigate]);
 
 
   const openEditModal = () => {
@@ -163,10 +151,10 @@ const CustomerDetailPage: React.FC = () => {
       setNotification({ type: 'success', text: 'اطلاعات مشتری با موفقیت به‌روزرسانی شد!' });
       setIsEditModalOpen(false);
       fetchCustomerDetails();
-    } catch (error) {
-      setNotification({ type: 'error', text: (error as Error).message });
-      if((error as Error).message.includes('تکراری')){
-         setEditFormErrors(prev => ({...prev, phoneNumber: (error as Error).message}));
+    } catch (error: any) {
+      setNotification({ type: 'error', text: error.message });
+      if(error.message.includes('تکراری')){
+         setEditFormErrors(prev => ({...prev, phoneNumber: error.message}));
        }
     } finally {
       setIsSubmittingEdit(false);
@@ -176,7 +164,7 @@ const CustomerDetailPage: React.FC = () => {
   const openLedgerModal = () => {
     setNewLedgerEntry(initialLedgerEntry);
     setLedgerDateSelected(new Date()); // Reset date picker to today
-    setTransactionType('credit');
+    setTransactionType('credit'); // Default to customer payment
     setLedgerFormErrors({});
     setIsLedgerModalOpen(true);
   };
@@ -194,10 +182,10 @@ const CustomerDetailPage: React.FC = () => {
         setNewLedgerEntry(prev => ({ ...prev, [name]: value }));
     }
     if (ledgerFormErrors[name as keyof NewLedgerEntryData] || ledgerFormErrors.amountType) {
-      setLedgerFormErrors(prev => ({ ...prev, [name]: undefined, amountType: undefined }));
+      setLedgerFormErrors(prev => ({ ...prev, [name]: undefined, amountType: undefined, transactionDate: undefined }));
     }
   };
-  
+
   const handleTransactionTypeChange = (e: ChangeEvent<HTMLInputElement>) => {
     const type = e.target.value as 'debit' | 'credit';
     setTransactionType(type);
@@ -210,15 +198,15 @@ const CustomerDetailPage: React.FC = () => {
   };
 
   const validateLedgerForm = (): boolean => {
-    const errors: Partial<NewLedgerEntryData & { amountType?: string }> = {};
+    const errors: Partial<NewLedgerEntryData & { amountType?: string, transactionDate?: string }> = {};
     if (!newLedgerEntry.description?.trim()) errors.description = 'شرح تراکنش الزامی است.';
-    
+
     const amount = transactionType === 'credit' ? newLedgerEntry.credit : newLedgerEntry.debit;
     if (amount === undefined || amount === null || isNaN(Number(amount)) || Number(amount) <= 0) {
         errors.amountType = 'مبلغ تراکنش باید عددی مثبت باشد.';
     }
-    if (!newLedgerEntry.transactionDate?.trim() || !moment(newLedgerEntry.transactionDate.trim(), 'YYYY/MM/DD', true).isValid()) {
-        errors.transactionDate = "تاریخ تراکنش شمسی معتبر (مثال: ۱۴۰۳/۰۵/۲۴) الزامی است.";
+    if (!ledgerDateSelected) { // Check the Date object directly
+        errors.transactionDate = "تاریخ تراکنش الزامی است.";
     }
     setLedgerFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -229,12 +217,12 @@ const CustomerDetailPage: React.FC = () => {
     if (!validateLedgerForm() || !id) return;
     setIsSubmittingLedger(true);
     setNotification(null);
-    
+
     const payload: NewLedgerEntryData = {
-        description: newLedgerEntry.description,
+        description: newLedgerEntry.description || '',
         debit: transactionType === 'debit' ? Number(newLedgerEntry.debit) : 0,
         credit: transactionType === 'credit' ? Number(newLedgerEntry.credit) : 0,
-        transactionDate: fromShamsiStringToISO(newLedgerEntry.transactionDate) // Convert to ISO for backend
+        transactionDate: fromDatePickerToISOString(ledgerDateSelected) // Convert Date to ISO YYYY-MM-DD
     };
 
     try {
@@ -250,19 +238,19 @@ const CustomerDetailPage: React.FC = () => {
       setNotification({ type: 'success', text: 'تراکنش با موفقیت ثبت شد!' });
       setIsLedgerModalOpen(false);
       fetchCustomerDetails();
-    } catch (error) {
-      setNotification({ type: 'error', text: (error as Error).message });
+    } catch (error: any) {
+      setNotification({ type: 'error', text: error.message });
     } finally {
       setIsSubmittingLedger(false);
     }
   };
-  
+
   const formatPrice = (price: number | undefined | null) => {
     if (price === undefined || price === null) return '-';
     return price.toLocaleString('fa-IR') + ' تومان';
   };
-  
-  const inputClass = (hasError: boolean, isTextarea = false) => 
+
+  const inputClass = (hasError: boolean, isTextarea = false) =>
     `w-full p-2.5 border rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm text-right ${isTextarea ? '' : ''}${hasError ? 'border-red-500 ring-red-300' : 'border-gray-300'}`;
   const labelClass = "block text-sm font-medium text-gray-700 mb-1";
 
@@ -285,7 +273,7 @@ const CustomerDetailPage: React.FC = () => {
           <h2 className="text-2xl font-semibold text-gray-800">
             پروفایل مشتری: {profile.fullName}
           </h2>
-          <button 
+          <button
             onClick={openEditModal}
             className="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors text-sm"
           >
@@ -304,7 +292,7 @@ const CustomerDetailPage: React.FC = () => {
       <div className="bg-white rounded-xl shadow-lg p-6">
         <div className="flex justify-between items-center mb-4 border-b pb-4">
           <h2 className="text-xl font-semibold text-gray-800">دفتر حساب مشتری (حساب دفتری)</h2>
-           <button 
+           <button
             onClick={openLedgerModal}
             className="px-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors text-sm"
           >
@@ -366,7 +354,7 @@ const CustomerDetailPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {purchaseHistory.map(sale => (
                   <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 whitespace-nowrap">{moment(sale.transactionDate, 'YYYY/MM/DD', 'fa').format('YYYY/MM/DD')}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{moment(sale.transactionDate, 'YYYY/MM/DD').locale('fa').format('YYYY/MM/DD')}</td>
                     <td className="px-4 py-2">{sale.itemName}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{sale.quantity.toLocaleString('fa-IR')}</td>
                     <td className="px-4 py-2 whitespace-nowrap">{formatPrice(sale.pricePerItem)}</td>
@@ -405,37 +393,34 @@ const CustomerDetailPage: React.FC = () => {
               <button type="button" onClick={() => setIsEditModalOpen(false)} className="ml-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                 انصراف
               </button>
-              <button type="submit" disabled={isSubmittingEdit} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-indigo-400 transition-colors">
+              <button type="submit" disabled={isSubmittingEdit} className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-400 transition-colors">
                 {isSubmittingEdit ? (<><i className="fas fa-spinner fa-spin mr-2"></i>در حال ذخیره...</>) : 'ذخیره تغییرات'}
               </button>
             </div>
           </form>
         </Modal>
       )}
-
+      
       {isLedgerModalOpen && (
-        <Modal title="ثبت تراکنش جدید در دفتر حساب" onClose={() => setIsLedgerModalOpen(false)} widthClass="max-w-lg">
+        <Modal title={`ثبت تراکنش برای ${profile.fullName}`} onClose={() => setIsLedgerModalOpen(false)} widthClass="max-w-lg">
           <form onSubmit={handleLedgerSubmit} className="space-y-4 p-1">
-             <div>
-                <span className={labelClass}>نوع تراکنش</span>
-                <div className="flex items-center space-x-4 space-x-reverse mt-1">
-                    <label className="flex items-center">
-                        <input type="radio" name="transactionType" value="credit" checked={transactionType === 'credit'} onChange={handleTransactionTypeChange} className="ml-2 accent-green-600" />
-                        پرداخت مشتری (بستانکار)
-                    </label>
-                    <label className="flex items-center">
-                        <input type="radio" name="transactionType" value="debit" checked={transactionType === 'debit'} onChange={handleTransactionTypeChange} className="ml-2 accent-red-600" />
-                        ایجاد بدهی / هزینه (بدهکار)
-                    </label>
-                </div>
+            <div className="flex space-x-4 space-x-reverse mb-3">
+                <label className="flex items-center cursor-pointer">
+                    <input type="radio" name="transactionType" value="credit" checked={transactionType === 'credit'} onChange={handleTransactionTypeChange} className="form-radio h-4 w-4 text-indigo-600 ml-2" />
+                    <span className="text-sm text-gray-700">دریافت از مشتری (بستانکار کردن مشتری)</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                    <input type="radio" name="transactionType" value="debit" checked={transactionType === 'debit'} onChange={handleTransactionTypeChange} className="form-radio h-4 w-4 text-indigo-600 ml-2" />
+                    <span className="text-sm text-gray-700">شارژ حساب مشتری (بدهکار کردن مشتری)</span>
+                </label>
             </div>
             <div>
-              <label htmlFor="ledgerAmount" className={labelClass}>مبلغ (تومان) <span className="text-red-500">*</span></label>
+              <label htmlFor="ledgerAmount" className={labelClass}>مبلغ تراکنش (تومان) <span className="text-red-500">*</span></label>
               <input 
                 type="number" 
                 id="ledgerAmount" 
-                name="amount" 
-                value={transactionType === 'credit' ? (newLedgerEntry.credit || '') : (newLedgerEntry.debit || '')} 
+                name="amount"
+                value={transactionType === 'credit' ? (newLedgerEntry.credit || '') : (newLedgerEntry.debit || '')}
                 onChange={handleLedgerInputChange} 
                 className={inputClass(!!ledgerFormErrors.amountType)} 
                 min="0.01" 
@@ -445,18 +430,18 @@ const CustomerDetailPage: React.FC = () => {
               />
               {ledgerFormErrors.amountType && <p className="mt-1 text-xs text-red-600">{ledgerFormErrors.amountType}</p>}
             </div>
-            <div>
+             <div>
               <label htmlFor="ledgerDescription" className={labelClass}>شرح تراکنش <span className="text-red-500">*</span></label>
-              <textarea id="ledgerDescription" name="description" value={newLedgerEntry.description} onChange={handleLedgerInputChange} rows={2} className={inputClass(!!ledgerFormErrors.description, true)} required />
+              <textarea id="ledgerDescription" name="description" value={newLedgerEntry.description || ''} onChange={handleLedgerInputChange} rows={2} className={inputClass(!!ledgerFormErrors.description, true)} required placeholder="مثال: پرداخت بدهی / شارژ حساب"/>
               {ledgerFormErrors.description && <p className="mt-1 text-xs text-red-600">{ledgerFormErrors.description}</p>}
             </div>
             <div>
-              <label htmlFor="ledgerTransactionDate" className={labelClass}>تاریخ تراکنش <span className="text-red-500">*</span></label>
-               <ShamsiDatePicker
-                id="ledgerTransactionDate"
-                selectedDate={ledgerDateSelected}
-                onDateChange={(date) => setLedgerDateSelected(date)}
-                inputClassName={inputClass(!!ledgerFormErrors.transactionDate)}
+              <label htmlFor="ledgerDatePicker" className={labelClass}>تاریخ تراکنش <span className="text-red-500">*</span></label>
+              <ShamsiDatePicker
+                  id="ledgerDatePicker"
+                  selectedDate={ledgerDateSelected}
+                  onDateChange={setLedgerDateSelected}
+                  inputClassName={inputClass(!!ledgerFormErrors.transactionDate)}
               />
               {ledgerFormErrors.transactionDate && <p className="mt-1 text-xs text-red-600">{ledgerFormErrors.transactionDate}</p>}
             </div>
@@ -464,11 +449,11 @@ const CustomerDetailPage: React.FC = () => {
               <button type="button" onClick={() => setIsLedgerModalOpen(false)} className="ml-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                 انصراف
               </button>
-              <button type="submit" disabled={isSubmittingLedger} className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-green-400 transition-colors">
-                {isSubmittingLedger ? (<><i className="fas fa-spinner fa-spin mr-2"></i>در حال ثبت...</>) : 'ثبت تراکنش'}
-              </button>
-            </div>
-          </form>
+              <button type="submit" disabled={isSubmittingLedger} className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-green-400">
+			  				ذخیره تغییرات {/* یا هر متن دیگری */}
+			  </button> {/* <-- تگ اینجا بسته می‌شود */}
+			</div>
+			</form>
         </Modal>
       )}
     </div>

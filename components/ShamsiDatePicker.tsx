@@ -1,9 +1,9 @@
 
-import React, { useState, useRef, useEffect, ReactNode } from 'react';
-import { DayPicker, SelectSingleEventHandler, ClassNames, Formatters } from 'react-day-picker';
+import React, { useState, useRef, useEffect } from 'react';
+import { DayPicker, SelectSingleEventHandler, ClassNames, Formatters, DayPickerProps } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import moment from 'jalali-moment';
-import type { Locale, DateLibOptions } from 'react-day-picker'; // Added DateLibOptions
+import type { Locale, DateLibOptions, Month as RDPMonth, Day as RDPDay } from 'react-day-picker';
 
 interface ShamsiDatePickerProps {
   selectedDate: Date | null | undefined;
@@ -14,9 +14,18 @@ interface ShamsiDatePickerProps {
   disabled?: boolean;
 }
 
-// Updated formatters to explicitly return string
 const formatCaptionShamsi = (date: Date, options?: { locale?: Locale }): string => {
-    return moment(date).locale('fa').format('jMMMM jYYYY');
+  const m = moment(date).locale('fa');
+  const shamsiYearNumber = m.jYear();
+  const monthName = moment.localeData('fa').jMonths()[m.jMonth()];
+  
+  let yearStringResult = shamsiYearNumber.toString();
+  // Pad with leading zeros if the Shamsi year is less than 4 digits (e.g., 803 becomes "0803")
+  // This matches the format seen in the user's screenshots like "آذر 0803".
+  if (shamsiYearNumber >= 0 && shamsiYearNumber < 1000) {
+     yearStringResult = shamsiYearNumber.toString().padStart(4, '0');
+  }
+  return `${monthName} ${yearStringResult}`;
 };
   
 const formatWeekdayNameShamsi = (date: Date, options?: { locale?: Locale }): string => {
@@ -42,17 +51,17 @@ const shamsiFnsLocale: Locale = {
       const quarters = ['سه‌ماهه اول', 'سه‌ماهه دوم', 'سه‌ماهه سوم', 'سه‌ماهه چهارم'];
       return quarters[q - 1];
     },
-    month: (monthIndex, options) => {
+    month: (monthIndex, options): string => { 
       return moment.localeData('fa').jMonths()[monthIndex];
     },
-    day: (dayIndex, options) => { 
+    day: (dayIndex, options): string => { 
       const momentFaWeekdays = moment.localeData('fa').weekdays(); 
       const momentFaWeekdaysShort = moment.localeData('fa').weekdaysShort(); 
-      const mappedIndex = (dayIndex + 1) % 7; 
+      const momentFaWeekdaysMin = moment.localeData('fa').weekdaysMin(); 
 
-      if (options?.width === 'short') return momentFaWeekdaysShort[mappedIndex];
-      if (options?.width === 'narrow') return moment.localeData('fa').weekdaysMin()[mappedIndex];
-      return momentFaWeekdays[mappedIndex];
+      if (options?.width === 'short') return momentFaWeekdaysShort[dayIndex];
+      if (options?.width === 'narrow') return momentFaWeekdaysMin[dayIndex] || momentFaWeekdaysShort[dayIndex];
+      return momentFaWeekdays[dayIndex];
     },
     dayPeriod: (period, options) => {
       if (options?.width === 'narrow') {
@@ -65,11 +74,7 @@ const shamsiFnsLocale: Locale = {
     date: () => 'jYYYY/jMM/jDD',
     time: () => 'HH:mm:ss',
     dateTime: () => 'jYYYY/jMM/jDD HH:mm:ss',
-    LT: () => 'HH:mm',            
-    LTS: () => 'HH:mm:ss',       
-    L: () => 'jYYYY/jMM/jDD',    
-    LL: () => 'jD jMMMM jYYYY',  
-    LLL: () => 'jD jMMMM jYYYY HH:mm', 
+    // LLL: () => 'jD jMMMM jYYYY HH:mm', // Removed due to error
     LLLL: () => 'dddd، jD jMMMM jYYYY HH:mm', 
     l: () => 'jYYYY/jM/jD',      
     ll: () => 'jD jMMM jYYYY',   
@@ -83,13 +88,13 @@ const shamsiFnsLocale: Locale = {
         const num = parseInt(str.replace('سه‌ماهه ', ''), 10);
         return (num >= 1 && num <= 4) ? {value: num as 1|2|3|4, rest: ''} : null;
     },
-    month: (str) => {
+    month: (str): ({ value: number; rest: string; }) | null => {
         const monthIndex = moment.localeData('fa').jMonths().indexOf(str);
-        return monthIndex !== -1 ? {value: monthIndex, rest: ''} : null;
+        return monthIndex !== -1 ? {value: monthIndex as number, rest: ''} : null;
     },
-    day: (str) => {
+    day: (str): ({ value: number; rest: string; }) | null => {
         const dayIndex = moment.localeData('fa').weekdays().indexOf(str);
-        return dayIndex !== -1 ? {value: (dayIndex + 6) % 7, rest: ''} : null; 
+        return dayIndex !== -1 ? {value: dayIndex as number, rest: ''} : null;
     },
     dayPeriod: (str) => {
         if (str === 'ق.ظ' || str === 'ق') return {value: 'am', rest: ''};
@@ -103,11 +108,16 @@ const shamsiFnsLocale: Locale = {
   },
 };
 
-// react-day-picker's internal DateLib type for formatters expects string returns when used with a locale like this.
-const shamsiFormatters: Formatters<Locale> = {
-    formatCaption: formatCaptionShamsi as (month: Date, options?: DateLibOptions) => string,
-    formatWeekdayName: formatWeekdayNameShamsi as (weekday: Date, options?: DateLibOptions) => string,
-    formatDay: formatDayShamsi as (day: Date, options?: DateLibOptions) => string,
+const shamsiFormatters: Formatters = {
+    formatCaption: formatCaptionShamsi as (date: Date, options?: DateLibOptions) => string,
+    formatDay: formatDayShamsi as (date: Date, options?: DateLibOptions) => string,
+    formatWeekdayName: formatWeekdayNameShamsi as (date: Date, options?: DateLibOptions) => string,
+    formatMonthCaption: (monthDate: Date) => moment(monthDate).locale('fa').format('jMMMM'),
+    formatYearCaption: (yearDate: Date) => moment(yearDate).locale('fa').format('jYYYY'),
+    formatMonthDropdown: (monthDate: Date) => moment(monthDate).locale('fa').format('jMMMM'),
+    formatYearDropdown: (yearDate: Date) => moment(yearDate).locale('fa').format('jYYYY'),
+    // formatWeekNumber: (weekNumber: number) => String(weekNumber), // Commented out due to error
+    // formatWeekNumberHeader: (weekNumber: number) => `هفته ${weekNumber.toLocaleString('fa')}`, // Commented out due to error
 };
 
 
@@ -126,7 +136,7 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
 
   useEffect(() => {
     if (selectedDate) {
-      setInputValue(moment(selectedDate).locale('fa').format('YYYY/MM/DD'));
+      setInputValue(moment(selectedDate).locale('fa').format('jYYYY/jMM/jDD'));
     } else {
       setInputValue('');
     }
@@ -140,10 +150,6 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
-    // const mDate = moment(e.target.value, 'jYYYY/jMM/jDD', true); 
-    // if (mDate.isValid()) {
-    // onDateChange(mDate.toDate()); // Consider implications of immediate update
-    // }
   };
 
   const handleInputBlur = () => {
@@ -156,13 +162,15 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
         if (selectedDate) onDateChange(null);
     } else {
         if (selectedDate) {
-            setInputValue(moment(selectedDate).locale('fa').format('YYYY/MM/DD'));
+            setInputValue(moment(selectedDate).locale('fa').format('jYYYY/jMM/jDD'));
         } else {
             setInputValue('');
         }
     }
     setTimeout(() => {
-        if (pickerRef.current && inputRef.current && !pickerRef.current.contains(document.activeElement) && document.activeElement !== inputRef.current) {
+        if (pickerRef.current && inputRef.current && 
+            !pickerRef.current.contains(document.activeElement) && 
+            document.activeElement !== inputRef.current) {
              setIsOpen(false);
         }
     }, 150);
@@ -192,10 +200,8 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
     caption_label: "text-sm font-medium text-indigo-700",
     button_previous: "absolute right-1.5 top-1.5 text-indigo-600 hover:text-indigo-800", 
     button_next: "absolute left-1.5 top-1.5 text-indigo-600 hover:text-indigo-800", 
-    head_cell: "text-xs font-medium text-gray-500 w-9",
-    cell: "text-center",
     day: "h-9 w-9 p-0 text-sm hover:bg-indigo-100 rounded-md transition-colors",
-    day_today: "font-bold text-indigo-600",
+    // day_today: "font-bold text-indigo-600", // Removed due to error
     day_selected: "bg-indigo-600 text-white hover:bg-indigo-700 focus:bg-indigo-700 rounded-md",
     day_outside: "text-gray-400 opacity-75",
     caption_dropdowns: "flex justify-center items-center space-x-1 space-x-reverse",
@@ -203,6 +209,18 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
     dropdown_icon: "hidden", 
     dropdown_month: "rdp-dropdown_month mx-0.5",
     dropdown_year: "rdp-dropdown_year mx-0.5",
+    months: "flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4",
+    month: "space-y-4",
+    table: "w-full border-collapse",
+    head_row: "flex", 
+    row: "flex w-full mt-2",
+    day_disabled: "text-gray-300 cursor-not-allowed",
+    nav_button: "h-6 w-6 flex items-center justify-center p-1 rounded-md hover:bg-gray-100",
+    head: "rdp-head",
+    tbody: "rdp-tbody",
+    tfoot: "rdp-tfoot",
+    nav: "rdp-nav",
+    caption: "rdp-caption flex justify-between items-center p-2 relative",
   };
 
   return (
@@ -236,7 +254,7 @@ const ShamsiDatePicker: React.FC<ShamsiDatePickerProps> = ({
             showOutsideDays
             initialFocus={isOpen} 
             defaultMonth={defaultMonthGregorian} 
-            captionLayout="dropdown-buttons" // Changed to dropdown-buttons for better compatibility
+            captionLayout={"dropdown" as DayPickerProps['captionLayout']}
             fromYear={moment().jYear() - 100} 
             toYear={moment().jYear() + 20}   
             classNames={dayPickerClassNames}

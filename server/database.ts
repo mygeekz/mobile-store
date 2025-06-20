@@ -5,14 +5,11 @@ import { fileURLToPath } from 'url';
 import moment from 'jalali-moment';
 import bcryptjs from 'bcryptjs';
 
-// Import types from frontend. Adjust path if needed.
-// Assuming types.ts is in the root of the frontend src, and server is at project_root/server
-// This might need adjustment based on your actual project structure or tsconfig paths
-// For simplicity, let's assume types.ts is copied or accessible.
-// A better way would be to define shared types in a common package or use paths in tsconfig.
-// For now, I'll define minimal local types for backend or assume they can be imported.
+// import type { InstallmentSalePayload, InstallmentCheckInfo, CheckStatus } from '../../types'; // Import frontend types for payload
+// Moved these specific types to be exported from this file if they are defined here or re-exported
+// For now, assuming they are similar to what's needed by frontend or defined in ../../types.ts
 
-// Minimal local types for backend, replace with actual imports if shared types are set up
+// Shared types (could be imported from a shared types file if frontend and backend share one)
 export interface ProductPayload {
   name: string;
   purchasePrice: number;
@@ -47,6 +44,7 @@ export interface SaleDataPayload {
   customerId?: number | null;
   notes?: string | null;
   discount?: number;
+  paymentMethod: 'cash' | 'credit'; // Added
 }
 export interface CustomerPayload {
   fullName: string;
@@ -73,7 +71,7 @@ export interface SettingItem {
     key: string;
     value: string;
 }
-export interface OldMobilePhonePayload {
+export interface OldMobilePhonePayload { // For the deprecated mobile phone structure
     purchasePrice: number;
     sellingPrice: number;
     brand: string;
@@ -84,6 +82,30 @@ export interface OldMobilePhonePayload {
     imei: string;
 }
 
+// Types for Installment Sales - Ensure these are exported if used by server/index.ts
+export type CheckStatus = "در جریان وصول" | "وصول شده" | "برگشت خورده" | "نزد مشتری" | "باطل شده";
+
+export interface InstallmentCheckInfo {
+  id?: number; 
+  checkNumber: string;
+  bankName: string;
+  dueDate: string; 
+  amount: number;
+  status: CheckStatus;
+}
+
+export interface InstallmentSalePayload { 
+  customerId: number;
+  phoneId: number;
+  actualSalePrice: number;
+  downPayment: number;
+  numberOfInstallments: number;
+  installmentAmount: number;
+  installmentsStartDate: string; 
+  checks: InstallmentCheckInfo[]; 
+  notes?: string;
+}
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -91,7 +113,7 @@ const __dirname = dirname(__filename);
 export const DB_PATH = join(__dirname, 'kourosh_inventory.db');
 const MOBILE_PHONE_CATEGORY_NAME = "گوشی‌های موبایل";
 const DEFAULT_CATEGORIES = ["لوازم جانبی", "قطعات"];
-const DEFAULT_SUPPLIER_NAME = "تامین‌کننده نمونه";
+// const DEFAULT_SUPPLIER_NAME = "تامین‌کننده نمونه"; // This is now removed
 const DEFAULT_ADMIN_USERNAME = 'admin';
 const DEFAULT_ADMIN_PASSWORD = 'password123';
 
@@ -100,7 +122,7 @@ let db: sqlite3.Database | null = null;
 // Promisified DB operations
 const runAsync = (sql: string, params: any[] = []): Promise<sqlite3.RunResult> => {
   return new Promise((resolve, reject) => {
-    if (!db) return reject(new Error("Database not initialized."));
+    if (!db) return reject(new Error("Database not initialized. Call getDbInstance first."));
     db.run(sql, params, function(this: sqlite3.RunResult, err: Error | null) {
       if (err) return reject(err);
       resolve(this);
@@ -110,7 +132,7 @@ const runAsync = (sql: string, params: any[] = []): Promise<sqlite3.RunResult> =
 
 export const getAsync = (sql: string, params: any[] = []): Promise<any> => {
   return new Promise((resolve, reject) => {
-    if (!db) return reject(new Error("Database not initialized."));
+    if (!db) return reject(new Error("Database not initialized. Call getDbInstance first."));
     db.get(sql, params, (err: Error | null, row: any) => {
       if (err) return reject(err);
       resolve(row);
@@ -120,7 +142,7 @@ export const getAsync = (sql: string, params: any[] = []): Promise<any> => {
 
 const allAsync = (sql: string, params: any[] = []): Promise<any[]> => {
   return new Promise((resolve, reject) => {
-    if (!db) return reject(new Error("Database not initialized."));
+    if (!db) return reject(new Error("Database not initialized. Call getDbInstance first."));
     db.all(sql, params, (err: Error | null, rows: any[]) => {
       if (err) return reject(err);
       resolve(rows);
@@ -130,7 +152,7 @@ const allAsync = (sql: string, params: any[] = []): Promise<any[]> => {
 
 const execAsync = (sql: string): Promise<void> => {
   return new Promise((resolve, reject) => {
-    if (!db) return reject(new Error("Database not initialized."));
+    if (!db) return reject(new Error("Database not initialized. Call getDbInstance first."));
     db.exec(sql, function(this: sqlite3.Statement, err: Error | null) {
       if (err) return reject(err);
       resolve();
@@ -159,22 +181,13 @@ const seedDefaultCategories = async (): Promise<void> => {
   }
 };
 
+// This function is no longer needed and its logic is removed.
 const seedDefaultSupplier = async (): Promise<void> => {
-  const existing = await getAsync("SELECT id FROM partners WHERE partnerName = ? AND partnerType = 'Supplier'", [DEFAULT_SUPPLIER_NAME]);
-  if (!existing) {
-    await runAsync(
-      "INSERT INTO partners (partnerName, partnerType, phoneNumber) VALUES (?, 'Supplier', ?)",
-      [DEFAULT_SUPPLIER_NAME, `09000000000${Math.floor(Math.random()*100)}`] // Dummy phone
-    );
-    console.log(`Default supplier "${DEFAULT_SUPPLIER_NAME}" created.`);
-  }
+    // Logic for seeding default supplier is removed.
 };
 
 const initializeDatabaseInternal = async (): Promise<void> => {
   // Non-destructive: Use CREATE TABLE IF NOT EXISTS
-  // Order matters for foreign keys if not using deferred checks.
-  // Simpler to create tables that others depend on first.
-  
   try {
     await runAsync("PRAGMA foreign_keys = ON;");
     console.log("Foreign key support enabled.");
@@ -265,7 +278,7 @@ const initializeDatabaseInternal = async (): Promise<void> => {
         purchaseDate TEXT, /* ISO Date YYYY-MM-DD */
         saleDate TEXT,     /* ISO Date YYYY-MM-DD */
         registerDate TEXT NOT NULL, /* ISO DateTime string */
-        status TEXT NOT NULL, /* e.g., "موجود در انبار", "فروخته شده" */
+        status TEXT NOT NULL, /* e.g., "موجود در انبار", "فروخته شده", "فروخته شده (قسطی)" */
         notes TEXT,
         supplierId INTEGER,
         FOREIGN KEY (supplierId) REFERENCES partners(id) ON DELETE SET NULL
@@ -312,6 +325,7 @@ const initializeDatabaseInternal = async (): Promise<void> => {
         notes TEXT,
         customerId INTEGER,
         discount REAL DEFAULT 0,
+        paymentMethod TEXT DEFAULT 'cash', /* Added paymentMethod with default 'cash' */
         FOREIGN KEY (customerId) REFERENCES customers(id) ON DELETE SET NULL
       );
     `);
@@ -345,6 +359,54 @@ const initializeDatabaseInternal = async (): Promise<void> => {
     `);
     console.log("Users table ensured.");
 
+    // New Installment Sales Tables
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS installment_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customerId INTEGER NOT NULL,
+        phoneId INTEGER NOT NULL,
+        actualSalePrice REAL NOT NULL,
+        downPayment REAL NOT NULL,
+        numberOfInstallments INTEGER NOT NULL,
+        installmentAmount REAL NOT NULL,
+        installmentsStartDate TEXT NOT NULL, -- Shamsi Date: YYYY/MM/DD
+        notes TEXT,
+        dateCreated TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now', 'utc')),
+        FOREIGN KEY (customerId) REFERENCES customers(id),
+        FOREIGN KEY (phoneId) REFERENCES phones(id)
+      );
+    `);
+    console.log("Installment_sales table ensured.");
+
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS installment_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        saleId INTEGER NOT NULL,
+        installmentNumber INTEGER NOT NULL,
+        dueDate TEXT NOT NULL, -- Shamsi Date: YYYY/MM/DD
+        amountDue REAL NOT NULL,
+        paymentDate TEXT, -- Shamsi Date: YYYY/MM/DD
+        status TEXT NOT NULL DEFAULT 'پرداخت نشده', -- ('پرداخت نشده', 'پرداخت شده')
+        FOREIGN KEY (saleId) REFERENCES installment_sales(id) ON DELETE CASCADE
+      );
+    `);
+    console.log("Installment_payments table ensured.");
+
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS installment_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        saleId INTEGER NOT NULL,
+        checkNumber TEXT NOT NULL,
+        bankName TEXT NOT NULL,
+        dueDate TEXT NOT NULL, -- Shamsi Date: YYYY/MM/DD
+        amount REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'نزد مشتری', 
+        FOREIGN KEY (saleId) REFERENCES installment_sales(id) ON DELETE CASCADE
+      );
+    `);
+    console.log("Installment_checks table ensured.");
+
+
   } catch(err: any) {
     console.error("Error during table creation phase:", err);
     throw new Error(`Failed during table creation: ${err.message}`);
@@ -354,7 +416,7 @@ const initializeDatabaseInternal = async (): Promise<void> => {
   try {
     await getOrCreateMobilePhoneCategory();
     await seedDefaultCategories();
-    await seedDefaultSupplier();
+    // The call to seedDefaultSupplier() is removed from here.
     await seedInitialRolesAndAdmin();
     await ensureDefaultBusinessSettings();
     console.log("Initial data seeding completed/verified.");
@@ -379,7 +441,7 @@ export const getDbInstance = (forceNew: boolean = false): Promise<sqlite3.Databa
                 return rejectConnection(new Error(`Failed to open DB: ${err.message}`));
             }
             console.log('Connected to the SQLite database: kourosh_inventory.db');
-            db = newDb;
+            db = newDb; // Crucial: assign to the module-scoped db variable
             try {
                 await initializeDatabaseInternal();
                 dbInstance = newDb;
@@ -387,6 +449,10 @@ export const getDbInstance = (forceNew: boolean = false): Promise<sqlite3.Databa
             } catch (initErr: any) {
                 console.error("Database initialization process failed:", initErr);
                 dbInitializationPromise = null; // Reset promise on failure
+                if (db) {
+                    db.close(); // Attempt to close the problematic connection
+                    db = null;
+                }
                 rejectConnection(new Error(`DB init failed: ${initErr.message}`));
             }
         });
@@ -396,7 +462,7 @@ export const getDbInstance = (forceNew: boolean = false): Promise<sqlite3.Databa
         db.close((closeErr: Error | null) => {
             if (closeErr) {
                 console.error('Error closing existing DB for re-initialization:', closeErr);
-                // Proceed with creating new connection anyway
+                // Proceed with creating new connection anyway, but log the error
             }
             db = null;
             dbInstance = null;
@@ -458,7 +524,7 @@ const addPartnerLedgerEntryInternal = async (
 
 // --- Categories ---
 export const addCategoryToDb = async (name: string): Promise<any> => {
-  await getDbInstance();
+  await getDbInstance(); // Ensure DB is initialized before any operation
   try {
     const result = await runAsync(`INSERT INTO categories (name) VALUES (?)`, [name]);
     return await getAsync("SELECT * FROM categories WHERE id = ?", [result.lastID]);
@@ -480,6 +546,41 @@ export const getAllCategoriesFromDb = async (): Promise<any[]> => {
     throw new Error(`خطای پایگاه داده: ${err.message}`);
   }
 };
+
+export const updateCategoryInDb = async (id: number, name: string): Promise<any> => {
+  await getDbInstance();
+  try {
+    const existing = await getAsync("SELECT id FROM categories WHERE id = ?", [id]);
+    if (!existing) {
+      throw new Error("دسته‌بندی برای بروزرسانی یافت نشد.");
+    }
+    await runAsync(`UPDATE categories SET name = ? WHERE id = ?`, [name, id]);
+    return await getAsync("SELECT * FROM categories WHERE id = ?", [id]);
+  } catch (err: any) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      throw new Error('این نام دسته‌بندی قبلا ثبت شده است.');
+    }
+    console.error('DB Error (updateCategoryInDb):', err);
+    throw new Error(`خطای پایگاه داده: ${err.message}`);
+  }
+};
+
+export const deleteCategoryFromDb = async (id: number): Promise<boolean> => {
+  await getDbInstance();
+  try {
+    const result = await runAsync(`DELETE FROM categories WHERE id = ?`, [id]);
+    if (result.changes === 0) {
+        // This check is a bit redundant if the calling function already checks for 404,
+        // but good for direct DB function calls.
+        throw new Error("دسته‌بندی برای حذف یافت نشد یا قبلا حذف شده است.");
+    }
+    return result.changes > 0;
+  } catch (err: any) {
+    console.error('DB Error (deleteCategoryFromDb):', err);
+    throw new Error(`خطای پایگاه داده: ${err.message}`);
+  }
+};
+
 
 // --- Products (Inventory) ---
 export const addProductToDb = async (product: ProductPayload): Promise<any> => {
@@ -591,7 +692,7 @@ export const addPhoneEntryToDb = async (phoneData: PhoneEntryPayload): Promise<a
   }
 };
 
-export const getAllPhoneEntriesFromDb = async (supplierIdFilter: number | null = null): Promise<any[]> => {
+export const getAllPhoneEntriesFromDb = async (supplierIdFilter: number | null = null, statusFilter?: string): Promise<any[]> => {
   await getDbInstance();
   let sql = `
     SELECT ph.*, pa.partnerName as supplierName
@@ -599,10 +700,21 @@ export const getAllPhoneEntriesFromDb = async (supplierIdFilter: number | null =
     LEFT JOIN partners pa ON ph.supplierId = pa.id
   `;
   const params: any[] = [];
+  const conditions: string[] = [];
+
   if (supplierIdFilter) {
-    sql += " WHERE ph.supplierId = ?";
+    conditions.push("ph.supplierId = ?");
     params.push(supplierIdFilter);
   }
+  if (statusFilter) {
+    conditions.push("ph.status = ?");
+    params.push(statusFilter);
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+  
   sql += " ORDER BY ph.registerDate DESC";
   try {
     return await allAsync(sql, params);
@@ -694,7 +806,7 @@ const addCustomerLedgerEntryInternal = async (
 
 export const recordSaleTransactionInDb = async (saleData: SaleDataPayload): Promise<any> => {
   await getDbInstance();
-  const { itemType, itemId, quantity, transactionDate, customerId, notes, discount = 0 } = saleData;
+  const { itemType, itemId, quantity, transactionDate, customerId, notes, discount = 0, paymentMethod } = saleData; // Added paymentMethod
 
   try {
     await execAsync("BEGIN TRANSACTION;");
@@ -710,7 +822,7 @@ export const recordSaleTransactionInDb = async (saleData: SaleDataPayload): Prom
 
       itemName = `${phone.model} (IMEI: ${phone.imei})`;
       pricePerItem = phone.salePrice;
-      await runAsync("UPDATE phones SET status = 'فروخته شده', saleDate = ? WHERE id = ?", [transactionDate, itemId]);
+      await runAsync("UPDATE phones SET status = 'فروخته شده', saleDate = ? WHERE id = ?", [fromShamsiStringToISO(transactionDate), itemId]);
     } else if (itemType === 'inventory') {
       const product = await getAsync("SELECT name, sellingPrice, stock_quantity FROM products WHERE id = ?", [itemId]);
       if (!product) throw new Error('کالای مورد نظر در انبار یافت نشد.');
@@ -730,14 +842,15 @@ export const recordSaleTransactionInDb = async (saleData: SaleDataPayload): Prom
     if (totalPrice < 0) throw new Error('قیمت نهایی پس از تخفیف نمی‌تواند منفی باشد.');
 
     const saleResult = await runAsync(
-      `INSERT INTO sales_transactions (transactionDate, itemType, itemId, itemName, quantity, pricePerItem, discount, totalPrice, customerId, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [transactionDate, itemType, itemId, itemName, quantity, pricePerItem, discount, totalPrice, customerId, notes]
+      `INSERT INTO sales_transactions (transactionDate, itemType, itemId, itemName, quantity, pricePerItem, discount, totalPrice, customerId, notes, paymentMethod)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // Added paymentMethod
+      [transactionDate, itemType, itemId, itemName, quantity, pricePerItem, discount, totalPrice, customerId, notes, paymentMethod] // Added paymentMethod
     );
 
-    if (customerId && totalPrice > 0) {
+    // Conditionally add to customer ledger only if paymentMethod is 'credit' and there's a customer
+    if (customerId && totalPrice > 0 && paymentMethod === 'credit') {
       const saleDateISO = moment(transactionDate, 'jYYYY/jMM/jDD').toISOString();
-      await addCustomerLedgerEntryInternal(customerId, `خرید کالا: ${itemName}`, totalPrice, 0, saleDateISO);
+      await addCustomerLedgerEntryInternal(customerId, `خرید کالا: ${itemName} (روش پرداخت: اعتباری)`, totalPrice, 0, saleDateISO);
     }
 
     await execAsync("COMMIT;");
@@ -825,7 +938,7 @@ export const updateCustomerInDb = async (customerId: number, customerData: Custo
     return await getAsync("SELECT * FROM customers WHERE id = ?", [customerId]);
   } catch (err: any) {
     console.error('DB Error (updateCustomerInDb):', err);
-     if (err.message.includes('UNIQUE constraint failed: customers.phoneNumber') || err.message.includes('شماره تماس قبلا برای مشتری دیگری ثبت شده است')) {
+     if (err.message.includes('تکراری') || err.message.toLowerCase().includes('unique constraint')) {
       throw new Error('شماره تماس ارائه شده تکراری است.');
     }
     throw new Error(`خطای پایگاه داده: ${err.message}`);
@@ -858,7 +971,7 @@ export const addCustomerLedgerEntryToDb = async (customerId: number, entryData: 
         await execAsync("ROLLBACK;").catch(rbErr => console.error("Rollback failed in addCustomerLedgerEntryToDb:", rbErr));
         console.error('DB Error (addCustomerLedgerEntryToDb):', err);
         throw new Error(`خطای پایگاه داده: ${err.message}`);
-    }
+  }
 };
 
 export const getLedgerForCustomerFromDb = async (customerId: number): Promise<any[]> => {
@@ -873,7 +986,7 @@ export const getLedgerForCustomerFromDb = async (customerId: number): Promise<an
 
 // --- Partners ---
 export const addPartnerToDb = async (partnerData: PartnerPayload): Promise<any> => {
-  await getDbInstance();
+  await getDbInstance(); // Ensure DB is initialized
   const { partnerName, partnerType, contactPerson, phoneNumber, email, address, notes } = partnerData;
   try {
     if (phoneNumber) {
@@ -932,19 +1045,34 @@ export const updatePartnerInDb = async (partnerId: number, partnerData: PartnerP
   await getDbInstance();
   const { partnerName, partnerType, contactPerson, phoneNumber, email, address, notes } = partnerData;
   try {
-    const existing = await getAsync("SELECT id FROM partners WHERE id = ?", [partnerId]);
+    const existing = await getAsync("SELECT * FROM partners WHERE id = ?", [partnerId]);
     if (!existing) throw new Error("همکار برای بروزرسانی یافت نشد.");
 
-    if (phoneNumber) {
-      const existingPartnerWithPhone = await getAsync("SELECT id FROM partners WHERE phoneNumber = ? AND id != ?", [phoneNumber, partnerId]);
+    // Prepare updated data, using existing values if new ones are not provided (for a PATCH-like behavior if needed)
+    const dataToUpdate = {
+        partnerName: partnerName !== undefined ? partnerName : existing.partnerName,
+        partnerType: partnerType !== undefined ? partnerType : existing.partnerType,
+        contactPerson: contactPerson !== undefined ? (contactPerson || null) : existing.contactPerson,
+        phoneNumber: phoneNumber !== undefined ? (phoneNumber || null) : existing.phoneNumber,
+        email: email !== undefined ? (email || null) : existing.email,
+        address: address !== undefined ? (address || null) : existing.address,
+        notes: notes !== undefined ? (notes || null) : existing.notes,
+    };
+    
+    if (dataToUpdate.phoneNumber) { // Check for uniqueness only if phone number is being set/changed
+      const existingPartnerWithPhone = await getAsync("SELECT id FROM partners WHERE phoneNumber = ? AND id != ?", [dataToUpdate.phoneNumber, partnerId]);
       if (existingPartnerWithPhone) {
         throw new Error('شماره تماس قبلا برای همکار دیگری ثبت شده است.');
       }
     }
+
     await runAsync(
       `UPDATE partners SET partnerName = ?, partnerType = ?, contactPerson = ?, phoneNumber = ?, email = ?, address = ?, notes = ?
        WHERE id = ?`,
-      [partnerName, partnerType, contactPerson || null, phoneNumber || null, email || null, address || null, notes || null, partnerId]
+      [
+        dataToUpdate.partnerName, dataToUpdate.partnerType, dataToUpdate.contactPerson, dataToUpdate.phoneNumber,
+        dataToUpdate.email, dataToUpdate.address, dataToUpdate.notes, partnerId
+      ]
     );
     return await getAsync("SELECT * FROM partners WHERE id = ?", [partnerId]);
   } catch (err: any) {
@@ -960,9 +1088,16 @@ export const deletePartnerFromDb = async (partnerId: number): Promise<boolean> =
   await getDbInstance();
   try {
     const result = await runAsync(`DELETE FROM partners WHERE id = ?`, [partnerId]);
+    if (result.changes === 0) {
+      throw new Error("همکار برای حذف یافت نشد یا قبلا حذف شده است.");
+    }
     return result.changes > 0;
   } catch (err: any) {
     console.error('DB Error (deletePartnerFromDb):', err);
+    // Check for foreign key constraint error if partner is in use and cannot be deleted
+    if (err.message.includes('FOREIGN KEY constraint failed')) {
+        throw new Error('امکان حذف این همکار وجود ندارد زیرا در سوابق فروش، محصولات یا دفتر حساب استفاده شده است.');
+    }
     throw new Error(`خطای پایگاه داده: ${err.message}`);
   }
 };
@@ -982,7 +1117,7 @@ export const addPartnerLedgerEntryToDb = async (partnerId: number, entryData: Le
         await execAsync("ROLLBACK;").catch(rbErr => console.error("Rollback failed in addPartnerLedgerEntryToDb:", rbErr));
         console.error('DB Error (addPartnerLedgerEntryToDb):', err);
         throw new Error(`خطای پایگاه داده: ${err.message}`);
-    }
+  }
 };
 
 export const getLedgerForPartnerFromDb = async (partnerId: number): Promise<any[]> => {
@@ -1064,7 +1199,7 @@ export const getSalesSummaryAndProfit = async (fromDateShamsi: string, toDateSha
     const averageSaleValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
 
     const dailySales = Array.from(dailySalesMap.entries())
-      .map(([date, totalSales]) => ({ date, totalSales }))
+      .map(([date, totalSalesValue]) => ({ date, totalSales: totalSalesValue }))
       .sort((a,b) => moment(a.date, 'jYYYY/jMM/jDD').valueOf() - moment(b.date, 'jYYYY/jMM/jDD').valueOf());
 
     const topSellingItems = Array.from(itemSalesMap.values())
@@ -1171,7 +1306,7 @@ export const getTopSuppliersByPurchaseValue = async (fromDateISO: string, toDate
 
 // --- Settings ---
 export const getSetting = async (key: string): Promise<string | null> => {
-  await getDbInstance();
+//  await getDbInstance();
   const row = await getAsync("SELECT value FROM settings WHERE key = ?", [key]);
   return row ? row.value : null;
 };
@@ -1187,7 +1322,7 @@ export const getAllSettingsAsObject = async (): Promise<Record<string, string>> 
 };
 
 export const updateSetting = async (key: string, value: string): Promise<sqlite3.RunResult> => {
-  await getDbInstance();
+ // await getDbInstance();
   return runAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);
 };
 
@@ -1208,7 +1343,7 @@ export const updateMultipleSettings = async (settingsArray: SettingItem[]): Prom
 };
 
 export const ensureDefaultBusinessSettings = async (): Promise<void> => {
-  await getDbInstance();
+  //await getDbInstance();
   const defaults: Record<string, string> = {
     store_name: 'فروشگاه کوروش',
     store_address_line1: 'خیابان اصلی، پلاک ۱۲۳',
@@ -1257,15 +1392,16 @@ export const getInvoiceDataById = async (saleId: number): Promise<any> => {
       cityStateZip: settings.store_city_state_zip || 'شهر، استان، کدپستی',
       phone: settings.store_phone || 'تلفن شما',
       email: settings.store_email || 'ایمیل شما',
-      logoUrl: settings.store_logo_path ? `/uploads/${settings.store_logo_path}` : ''
+      logoUrl: settings.store_logo_path ? `/uploads/${settings.store_logo_path.replace(/\\/g, '/')}` : undefined
     };
+    
 
     const lineItems = [{
       id: sale.id,
       description: sale.itemName,
       quantity: sale.quantity,
       unitPrice: sale.pricePerItem,
-      totalPrice: sale.pricePerItem * sale.quantity,
+      totalPrice: sale.pricePerItem * sale.quantity, // This is subtotal for the line item, discount is applied later
     }];
 
     const financialSummary = {
@@ -1279,7 +1415,7 @@ export const getInvoiceDataById = async (saleId: number): Promise<any> => {
       customerDetails,
       invoiceMetadata: {
         invoiceNumber: String(sale.id),
-        transactionDate: sale.transactionDate,
+        transactionDate: sale.transactionDate, // Shamsi date
       },
       lineItems,
       financialSummary,
@@ -1293,7 +1429,7 @@ export const getInvoiceDataById = async (saleId: number): Promise<any> => {
 
 // --- Users & Roles ---
 export const addRole = async (name: string): Promise<{ id: number; name: string }> => {
-  await getDbInstance();
+ // await getDbInstance();
   try {
     const existingRole = await getAsync("SELECT id, name FROM roles WHERE name = ?", [name]);
     if (existingRole) {
@@ -1303,11 +1439,11 @@ export const addRole = async (name: string): Promise<{ id: number; name: string 
     const result = await runAsync("INSERT INTO roles (name) VALUES (?)", [name]);
     return { id: result.lastID, name };
   } catch (err: any) {
-    if (err.message.includes("UNIQUE constraint failed")) { // Should be caught by the check above
+    if (err.message.includes("UNIQUE constraint failed")) {
       console.warn(`Role "${name}" already exists (caught by constraint).`);
       const existingRoleAfterAttempt = await getAsync("SELECT id, name FROM roles WHERE name = ?", [name]);
       if (existingRoleAfterAttempt) return existingRoleAfterAttempt;
-      throw err; // Rethrow if still not found after constraint error (unlikely)
+      throw err; // Re-throw if still not found, indicates other issue
     }
     console.error("DB Error adding role:", err);
     throw new Error(`خطای پایگاه داده هنگام افزودن نقش: ${err.message}`);
@@ -1325,7 +1461,7 @@ export const getAllRoles = async (): Promise<any[]> => {
 };
 
 export const addUserToDb = async (username: string, password: string, roleId: number): Promise<{ id: number; username: string; roleId: number }> => {
-  await getDbInstance();
+//  await getDbInstance();
   const saltRounds = 10;
   let passwordHash: string;
   try {
@@ -1366,15 +1502,19 @@ export const getAllUsersWithRoles = async (): Promise<any[]> => {
 };
 
 export const seedInitialRolesAndAdmin = async (): Promise<void> => {
-  await getDbInstance();
+ // await getDbInstance();
   try {
     const adminRole = await addRole('Admin');
     await addRole('Salesperson');
 
     const adminUser = await getAsync("SELECT * FROM users WHERE username = ?", [DEFAULT_ADMIN_USERNAME]);
-    if (!adminUser && adminRole) {
+    if (!adminUser && adminRole && adminRole.id) { // Ensure adminRole.id is valid
       await addUserToDb(DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, adminRole.id);
       console.log(`Default admin user "${DEFAULT_ADMIN_USERNAME}" created.`);
+    } else if(adminUser) {
+        console.log(`Default admin user "${DEFAULT_ADMIN_USERNAME}" already exists.`);
+    } else if (!adminRole || !adminRole.id) {
+        console.error("Admin role could not be created or retrieved, cannot seed admin user.");
     }
   } catch (err: any) {
     console.error("Error seeding roles and admin user:", err);
@@ -1387,57 +1527,35 @@ export const getDashboardKPIs = async (): Promise<any> => {
   try {
     const currentShamsiMonthStart = moment().locale('fa').startOf('jMonth').format('YYYY/MM/DD');
     const currentShamsiMonthEnd = moment().locale('fa').endOf('jMonth').format('YYYY/MM/DD');
+    const todayShamsi = moment().locale('fa').format('YYYY/MM/DD');
 
-    const salesCurrentMonth = await allAsync(`
-      SELECT
-        st.totalPrice, st.quantity,
-        CASE
-          WHEN st.itemType = 'inventory' THEN COALESCE(p.purchasePrice, 0)
-          WHEN st.itemType = 'phone' THEN COALESCE(ph.purchasePrice, 0)
-          ELSE 0
-        END as costPricePerUnit
-      FROM sales_transactions st
-      LEFT JOIN products p ON st.itemType = 'inventory' AND st.itemId = p.id
-      LEFT JOIN phones ph ON st.itemType = 'phone' AND st.itemId = ph.id
-      WHERE st.transactionDate >= ? AND st.transactionDate <= ?
+    const salesCurrentMonthResult = await getAsync(`
+      SELECT SUM(totalPrice) as totalSalesMonth
+      FROM sales_transactions
+      WHERE transactionDate >= ? AND transactionDate <= ?
     `, [currentShamsiMonthStart, currentShamsiMonthEnd]);
+    const totalSalesMonth = salesCurrentMonthResult?.totalSalesMonth || 0;
 
-    let totalRevenueCurrentMonth = 0;
-    let grossProfitCurrentMonth = 0;
-    salesCurrentMonth.forEach(sale => {
-      totalRevenueCurrentMonth += sale.totalPrice;
-      grossProfitCurrentMonth += (sale.totalPrice - (sale.costPricePerUnit * sale.quantity));
-    });
+    const revenueTodayResult = await getAsync(`
+      SELECT SUM(totalPrice) as revenueToday
+      FROM sales_transactions
+      WHERE transactionDate = ?
+    `, [todayShamsi]);
+    const revenueToday = revenueTodayResult?.revenueToday || 0;
+    
+    const activeProductsCountResult = await getAsync(`SELECT COUNT(id) as count FROM products WHERE stock_quantity > 0`);
+    const activePhonesCountResult = await getAsync(`SELECT COUNT(id) as count FROM phones WHERE status = 'موجود در انبار'`);
+    const activeProductsCount = (activeProductsCountResult?.count || 0) + (activePhonesCountResult?.count || 0);
 
-    const receivablesResult = await getAsync(`
-      SELECT SUM(balance) as totalReceivables
-      FROM (
-        SELECT cl.balance
-        FROM customer_ledger cl
-        INNER JOIN (SELECT customerId, MAX(id) as max_id FROM customer_ledger GROUP BY customerId) last_cl
-        ON cl.customerId = last_cl.customerId AND cl.id = last_cl.max_id
-        WHERE cl.balance > 0
-      )
-    `);
-    const totalReceivables = receivablesResult?.totalReceivables || 0;
+    const totalCustomersCountResult = await getAsync(`SELECT COUNT(id) as count FROM customers`);
+    const totalCustomersCount = totalCustomersCountResult?.count || 0;
 
-    const payablesResult = await getAsync(`
-      SELECT SUM(balance) as totalPayables
-      FROM (
-        SELECT pl.balance
-        FROM partner_ledger pl
-        INNER JOIN (SELECT partnerId, MAX(id) as max_id FROM partner_ledger GROUP BY partnerId) last_pl
-        ON pl.partnerId = last_pl.partnerId AND pl.id = last_pl.max_id
-        WHERE pl.balance > 0
-      )
-    `);
-    const totalPayables = payablesResult?.totalPayables || 0;
 
     return {
-      totalRevenueCurrentMonth,
-      grossProfitCurrentMonth,
-      totalReceivables,
-      totalPayables
+      totalSalesMonth,
+      revenueToday,
+      activeProductsCount,
+      totalCustomersCount,
     };
   } catch (err: any) {
     console.error("DB Error (getDashboardKPIs):", err);
@@ -1448,70 +1566,81 @@ export const getDashboardKPIs = async (): Promise<any> => {
 export const getDashboardSalesChartData = async (period: string = 'monthly'): Promise<any[]> => {
   await getDbInstance();
   const salesDataPoints: {name: string; sales: number}[] = [];
-  let startDate: moment.Moment, endDate: moment.Moment, groupByFormat: string, pointNameFormat: string, momentUnit: moment.unitOfTime.Diff;
+  let startDateMoment: moment.Moment, endDateMoment: moment.Moment;
+  let pointNameFormat: string, groupByFormat: string;
+  let isSameOrBeforeUnit: moment.unitOfTime.StartOf;
+  let addUnit: moment.unitOfTime.DurationConstructor;
+
 
   const today = moment().locale('fa');
 
   switch (period) {
-    case 'weekly':
-      startDate = today.clone().subtract(6, 'days');
-      endDate = today;
+    case 'weekly': // Last 7 days, including today
+      endDateMoment = today.clone();
+      startDateMoment = today.clone().subtract(6, 'days');
+      pointNameFormat = 'dddd'; // e.g., شنبه
       groupByFormat = 'YYYY/MM/DD';
-      pointNameFormat = 'dddd';
-      momentUnit = 'days';
+      isSameOrBeforeUnit = 'day';
+      addUnit = 'days';
       break;
-    case 'yearly':
-      startDate = today.clone().startOf('jYear');
-      endDate = today.clone().endOf('jYear');
-      groupByFormat = 'jYYYY/jMM';
-      pointNameFormat = 'jMMMM';
-      momentUnit = 'jMonth';
+    case 'yearly': // Current Shamsi year, by month
+      startDateMoment = today.clone().startOf('jYear');
+      endDateMoment = today.clone().endOf('jYear'); 
+      pointNameFormat = 'jMMMM'; // e.g., فروردین
+      groupByFormat = 'jYYYY/jMM'; // Group by Shamsi year/month
+      isSameOrBeforeUnit = 'jMonth'; 
+      addUnit = 'months'; 
       break;
-    case 'monthly':
+    case 'monthly': // Current Shamsi month, by day
     default:
-      startDate = today.clone().startOf('jMonth');
-      endDate = today.clone().endOf('jMonth');
+      startDateMoment = today.clone().startOf('jMonth');
+      endDateMoment = today.clone().endOf('jMonth'); 
+      pointNameFormat = 'jD'; // e.g., ۱, ۲, ۳
       groupByFormat = 'YYYY/MM/DD';
-      pointNameFormat = 'jD';
-      momentUnit = 'days';
+      isSameOrBeforeUnit = 'day';
+      addUnit = 'days';
       break;
   }
-
+  
   try {
-    const sales: {transactionDate: string; dailySales: number}[] = await allAsync(`
-      SELECT transactionDate, SUM(totalPrice) as dailySales
+    // Fetch all sales within the broader range to avoid multiple queries in loop
+    const salesInRange = await allAsync(`
+      SELECT transactionDate, SUM(totalPrice) as dailyTotal
       FROM sales_transactions
       WHERE transactionDate >= ? AND transactionDate <= ?
       GROUP BY transactionDate
       ORDER BY transactionDate ASC
-    `, [startDate.format('YYYY/MM/DD'), endDate.format('YYYY/MM/DD')]);
+    `, [startDateMoment.format('YYYY/MM/DD'), endDateMoment.format('YYYY/MM/DD')]);
 
-    const salesMap = new Map(sales.map(s => [s.transactionDate, s.dailySales]));
+    const salesMap = new Map<string, number>();
+    salesInRange.forEach(s => {
+      // For yearly, aggregate by month
+      if (period === 'yearly') {
+        const monthKey = moment(s.transactionDate, 'YYYY/MM/DD').format(groupByFormat);
+        salesMap.set(monthKey, (salesMap.get(monthKey) || 0) + s.dailyTotal);
+      } else {
+        salesMap.set(s.transactionDate, s.dailyTotal);
+      }
+    });
 
-    let currentLoopDate = startDate.clone();
-    while (currentLoopDate.isSameOrBefore(endDate, momentUnit === 'jMonth' ? 'month' : 'day')) {
-        const dateKey = currentLoopDate.format(groupByFormat);
-        let totalSalesForPoint = 0;
-
-        if (period === 'yearly') {
-            const monthSales = sales.filter(s => moment(s.transactionDate, 'YYYY/MM/DD').format('jYYYY/jMM') === dateKey);
-            totalSalesForPoint = monthSales.reduce((sum, s) => sum + s.dailySales, 0);
-        } else {
-            totalSalesForPoint = salesMap.get(currentLoopDate.format('YYYY/MM/DD')) || 0;
-        }
-
-        salesDataPoints.push({
-            name: currentLoopDate.format(pointNameFormat),
-            sales: totalSalesForPoint,
-        });
-
-        if (momentUnit === 'jMonth') {
-            currentLoopDate.add(1, 'jMonth');
-        } else {
-            currentLoopDate.add(1, 'day');
-        }
+    let currentLoopDate = startDateMoment.clone();
+    while(currentLoopDate.isSameOrBefore(endDateMoment, isSameOrBeforeUnit)) {
+      let dateKeyForMap: string;
+      if (period === 'yearly') {
+        dateKeyForMap = currentLoopDate.format(groupByFormat);
+      } else {
+        dateKeyForMap = currentLoopDate.format('YYYY/MM/DD');
+      }
+      
+      salesDataPoints.push({
+        name: currentLoopDate.format(pointNameFormat),
+        sales: salesMap.get(dateKeyForMap) || 0,
+      });
+      currentLoopDate.add(1, addUnit); 
     }
+    
     return salesDataPoints;
+
   } catch (err: any) {
      console.error("DB Error (getDashboardSalesChartData):", err);
      throw new Error(`خطای پایگاه داده در تهیه داده‌های نمودار فروش: ${err.message}`);
@@ -1525,76 +1654,55 @@ export const getDashboardRecentActivities = async (limit: number = 7): Promise<a
     const activities: any[] = [];
 
     const sales = await allAsync(`
-      SELECT st.id, st.transactionDate, st.itemName, st.totalPrice, c.fullName as customerName, c.id as customerId
+      SELECT st.id, st.transactionDate, st.itemName, st.totalPrice, c.fullName as customerName
       FROM sales_transactions st
       LEFT JOIN customers c ON st.customerId = c.id
       ORDER BY st.id DESC LIMIT ?
-    `, [limit]);
+    `, [Math.floor(limit / 2) +1]); // Fetch a bit more to ensure variety
     sales.forEach(s => activities.push({
       id: `sale-${s.id}`,
       typeDescription: 'فروش جدید',
-      details: `${s.itemName} به ${s.customerName || 'مشتری مهمان'} به مبلغ ${s.totalPrice.toLocaleString('fa-IR')} تومان`,
-      timestamp: moment(s.transactionDate, 'YYYY/MM/DD').toISOString(),
+      details: `${s.itemName} به ${s.customerName || 'مشتری مهمان'} (مبلغ: ${s.totalPrice.toLocaleString('fa-IR')} تومان)`,
+      timestamp: moment(s.transactionDate, 'YYYY/MM/DD').toISOString(), // Convert Shamsi to ISO for sorting
       icon: 'fa-solid fa-cart-plus',
-      color: 'text-green-500',
+      color: 'bg-green-500', // Use background color for consistency
       link: `/invoices/${s.id}`
     }));
 
-    const customerPayments = await allAsync(`
-      SELECT cl.id, cl.transactionDate, cl.credit, cl.description, c.fullName as customerName, c.id as customerId
-      FROM customer_ledger cl
-      JOIN customers c ON cl.customerId = c.id
-      WHERE cl.credit > 0 AND (cl.description LIKE '%پرداخت%' OR cl.description LIKE '%واریز%')
-      ORDER BY cl.id DESC LIMIT ?
-    `, [limit]);
-     customerPayments.forEach(cp => activities.push({
-      id: `custpay-${cp.id}`,
-      typeDescription: 'دریافت از مشتری',
-      details: `دریافت مبلغ ${cp.credit.toLocaleString('fa-IR')} تومان از ${cp.customerName} (${cp.description})`,
-      timestamp: cp.transactionDate,
-      icon: 'fa-solid fa-hand-holding-dollar',
-      color: 'text-blue-500',
-      link: `/customers/${cp.customerId}`
-    }));
-
-    const partnerPayments = await allAsync(`
-      SELECT pl.id, pl.transactionDate, pl.debit, pl.description, p.partnerName, p.id as partnerId
-      FROM partner_ledger pl
-      JOIN partners p ON pl.partnerId = p.id
-      WHERE pl.debit > 0 AND (pl.description LIKE '%پرداخت%' OR pl.description LIKE '%تسویه%')
-      ORDER BY pl.id DESC LIMIT ?
-    `, [limit]);
-    partnerPayments.forEach(pp => activities.push({
-      id: `partpay-${pp.id}`,
-      typeDescription: 'پرداخت به همکار',
-      details: `پرداخت مبلغ ${pp.debit.toLocaleString('fa-IR')} تومان به ${pp.partnerName} (${pp.description})`,
-      timestamp: pp.transactionDate,
-      icon: 'fa-solid fa-money-bill-transfer',
-      color: 'text-orange-500',
-      link: `/partners/${pp.partnerId}`
-    }));
-
-    const newProducts = await allAsync(`SELECT id, name, date_added FROM products ORDER BY id DESC LIMIT ?`, [limit]);
+    const newProducts = await allAsync(`SELECT id, name, date_added FROM products ORDER BY id DESC LIMIT ?`, [Math.floor(limit / 3) +1]);
     newProducts.forEach(p => activities.push({
       id: `product-${p.id}`,
-      typeDescription: 'محصول جدید',
-      details: `محصول "${p.name}" اضافه شد.`,
-      timestamp: p.date_added,
+      typeDescription: 'محصول جدید (انبار)',
+      details: `محصول "${p.name}" به انبار اضافه شد.`,
+      timestamp: p.date_added, // Already ISO
       icon: 'fa-solid fa-box',
-      color: 'text-purple-500',
-      link: `/products`
+      color: 'bg-blue-500',
+      link: `/products` // Or a detail page if exists
     }));
 
-    const newPhones = await allAsync(`SELECT id, model, imei, registerDate FROM phones ORDER BY id DESC LIMIT ?`, [limit]);
+    const newPhones = await allAsync(`SELECT id, model, imei, registerDate FROM phones ORDER BY id DESC LIMIT ?`, [Math.floor(limit / 3) +1]);
     newPhones.forEach(ph => activities.push({
       id: `phone-${ph.id}`,
-      typeDescription: 'گوشی جدید',
-      details: `گوشی ${ph.model} (IMEI: ${ph.imei}) ثبت شد.`,
-      timestamp: ph.registerDate,
+      typeDescription: 'گوشی موبایل جدید',
+      details: `گوشی ${ph.model} (IMEI: ${ph.imei}) به لیست گوشی‌ها اضافه شد.`,
+      timestamp: ph.registerDate, // Already ISO
       icon: 'fa-solid fa-mobile-screen-button',
-      color: 'text-teal-500',
-      link: `/mobile-phones`
+      color: 'bg-purple-500',
+      link: `/mobile-phones` // Or a detail page if exists
     }));
+    
+    // Add new customer registrations
+    const newCustomers = await allAsync(`SELECT id, fullName, dateAdded FROM customers ORDER BY id DESC LIMIT ?`, [Math.floor(limit/4)+1]);
+    newCustomers.forEach(c => activities.push({
+        id: `customer-${c.id}`,
+        typeDescription: 'مشتری جدید',
+        details: `مشتری "${c.fullName}" ثبت نام کرد.`,
+        timestamp: c.dateAdded, // Already ISO
+        icon: 'fa-solid fa-user-plus',
+        color: 'bg-teal-500',
+        link: `/customers/${c.id}`
+    }));
+
 
     activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return activities.slice(0, limit);
@@ -1604,6 +1712,182 @@ export const getDashboardRecentActivities = async (limit: number = 7): Promise<a
     throw new Error(`خطای پایگاه داده در دریافت فعالیت‌های اخیر: ${err.message}`);
   }
 };
+
+// --- Installment Sales ---
+export const addInstallmentSaleToDb = async (saleData: InstallmentSalePayload): Promise<any> => {
+  await getDbInstance();
+  const {
+    customerId, phoneId, actualSalePrice, downPayment,
+    numberOfInstallments, installmentAmount, installmentsStartDate, // Shamsi YYYY/MM/DD
+    checks, notes
+  } = saleData;
+
+  await execAsync("BEGIN TRANSACTION;");
+  try {
+    // 1. Insert into installment_sales
+    const saleResult = await runAsync(
+      `INSERT INTO installment_sales (customerId, phoneId, actualSalePrice, downPayment, numberOfInstallments, installmentAmount, installmentsStartDate, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [customerId, phoneId, actualSalePrice, downPayment, numberOfInstallments, installmentAmount, installmentsStartDate, notes]
+    );
+    const saleId = saleResult.lastID;
+
+    // 2. Update phone status and saleDate
+    const phoneSaleDateISO = moment(installmentsStartDate, 'jYYYY/jMM/jDD').toISOString();
+    await runAsync("UPDATE phones SET status = 'فروخته شده (قسطی)', saleDate = ? WHERE id = ?", [phoneSaleDateISO, phoneId]);
+    
+    // 3. Create installment_payments records
+    for (let i = 0; i < numberOfInstallments; i++) {
+      const dueDate = moment(installmentsStartDate, 'jYYYY/jMM/jDD').add(i, 'months').format('YYYY/MM/DD');
+      await runAsync(
+        `INSERT INTO installment_payments (saleId, installmentNumber, dueDate, amountDue, status)
+         VALUES (?, ?, ?, ?, ?)`,
+        [saleId, i + 1, dueDate, installmentAmount, 'پرداخت نشده']
+      );
+    }
+
+    // 4. Store checks
+    for (const check of checks) {
+      await runAsync(
+        `INSERT INTO installment_checks (saleId, checkNumber, bankName, dueDate, amount, status)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [saleId, check.checkNumber, check.bankName, check.dueDate, check.amount, check.status || 'نزد مشتری']
+      );
+    }
+
+    // 5. Add to customer ledger
+    const phoneDetails = await getAsync("SELECT model, imei FROM phones WHERE id = ?", [phoneId]);
+    const ledgerDescription = `فروش اقساطی موبایل: ${phoneDetails?.model || 'گوشی'} (IMEI: ${phoneDetails?.imei || 'N/A'}) - شناسه فروش: ${saleId}`;
+    const saleDateForLedgerISO = moment(installmentsStartDate, 'jYYYY/jMM/jDD').toISOString();
+    await addCustomerLedgerEntryInternal(customerId, ledgerDescription, actualSalePrice, 0, saleDateForLedgerISO);
+
+    await execAsync("COMMIT;");
+    return await getAsync("SELECT * FROM installment_sales WHERE id = ?", [saleId]);
+
+  } catch (error: any) {
+    await execAsync("ROLLBACK;");
+    console.error("DB Error (addInstallmentSaleToDb):", error);
+    throw new Error(`خطای پایگاه داده هنگام ثبت فروش اقساطی: ${error.message}`);
+  }
+};
+
+export const getAllInstallmentSalesFromDb = async (): Promise<any[]> => {
+  await getDbInstance();
+  const sales = await allAsync(`
+    SELECT 
+      isale.*, 
+      c.fullName as customerFullName, 
+      p.model as phoneModel, p.imei as phoneImei
+    FROM installment_sales isale
+    JOIN customers c ON isale.customerId = c.id
+    JOIN phones p ON isale.phoneId = p.id
+    ORDER BY isale.dateCreated DESC
+  `);
+
+  const results = [];
+  for (const sale of sales) {
+    const payments = await allAsync("SELECT * FROM installment_payments WHERE saleId = ? ORDER BY installmentNumber ASC", [sale.id]);
+    
+    const totalPaidAmount = payments
+      .filter(p => p.status === 'پرداخت شده')
+      .reduce((sum, p) => sum + p.amountDue, 0);
+
+    const remainingAmount = sale.actualSalePrice - sale.downPayment - totalPaidAmount;
+    
+    let overallStatus: string = 'در حال پرداخت';
+    if (remainingAmount <= 0) {
+      overallStatus = 'تکمیل شده';
+    } else {
+      const overduePayment = payments.find(p => p.status === 'پرداخت نشده' && moment(p.dueDate, 'YYYY/MM/DD').isBefore(moment(), 'day'));
+      if (overduePayment) {
+        overallStatus = 'معوق';
+      }
+    }
+    
+    const nextUnpaidPayment = payments.find(p => p.status === 'پرداخت نشده');
+    const nextDueDate = nextUnpaidPayment ? nextUnpaidPayment.dueDate : null;
+
+    results.push({
+      ...sale,
+      totalInstallmentPrice: (sale.numberOfInstallments * sale.installmentAmount) + sale.downPayment,
+      remainingAmount,
+      overallStatus,
+      nextDueDate,
+      // payments are not included in the list view for brevity, but fetched for calculation
+    });
+  }
+  return results;
+};
+
+export const getInstallmentSaleByIdFromDb = async (id: number): Promise<any | null> => {
+  await getDbInstance();
+  const sale = await getAsync(`
+    SELECT 
+      isale.*, 
+      c.fullName as customerFullName, 
+      p.model as phoneModel, p.imei as phoneImei
+    FROM installment_sales isale
+    JOIN customers c ON isale.customerId = c.id
+    JOIN phones p ON isale.phoneId = p.id
+    WHERE isale.id = ?
+  `, [id]);
+
+  if (!sale) return null;
+
+  const payments = await allAsync("SELECT * FROM installment_payments WHERE saleId = ? ORDER BY installmentNumber ASC", [id]);
+  const checks = await allAsync("SELECT * FROM installment_checks WHERE saleId = ? ORDER BY dueDate ASC", [id]);
+
+  const totalPaidAmount = payments
+    .filter(p => p.status === 'پرداخت شده')
+    .reduce((sum, p) => sum + p.amountDue, 0);
+  
+  const remainingAmount = sale.actualSalePrice - sale.downPayment - totalPaidAmount;
+
+  let overallStatus: string = 'در حال پرداخت';
+  if (remainingAmount <= 0 && payments.every(p => p.status === 'پرداخت شده')) {
+    overallStatus = 'تکمیل شده';
+  } else {
+    const overduePayment = payments.find(p => p.status === 'پرداخت نشده' && moment(p.dueDate, 'YYYY/MM/DD').isBefore(moment(), 'day'));
+    if (overduePayment) {
+      overallStatus = 'معوق';
+    }
+  }
+
+  const nextUnpaidPayment = payments.find(p => p.status === 'پرداخت نشده');
+  const nextDueDate = nextUnpaidPayment ? nextUnpaidPayment.dueDate : null;
+
+  return {
+    ...sale,
+    payments,
+    checks,
+    totalInstallmentPrice: (sale.numberOfInstallments * sale.installmentAmount) + sale.downPayment,
+    remainingAmount,
+    overallStatus,
+    nextDueDate,
+  };
+};
+
+export const updateInstallmentPaymentStatusInDb = async (paymentId: number, isPaid: boolean, paymentDateShamsi?: string): Promise<boolean> => {
+  await getDbInstance();
+  const status = isPaid ? 'پرداخت شده' : 'پرداخت نشده';
+  const dateToSet = isPaid ? (paymentDateShamsi || moment().locale('fa').format('YYYY/MM/DD')) : null;
+  
+  const result = await runAsync(
+    "UPDATE installment_payments SET status = ?, paymentDate = ? WHERE id = ?",
+    [status, dateToSet, paymentId]
+  );
+  return result.changes > 0;
+};
+
+export const updateCheckStatusInDb = async (checkId: number, newStatus: CheckStatus): Promise<boolean> => {
+  await getDbInstance();
+  const result = await runAsync(
+    "UPDATE installment_checks SET status = ? WHERE id = ?",
+    [newStatus, checkId]
+  );
+  return result.changes > 0;
+};
+
 
 // Old mobile_phone_details related functions (kept for potential data migration)
 export const getAllMobilePhonesFromDb = async (): Promise<any[]> => {
@@ -1672,7 +1956,7 @@ export const addMobilePhoneToDbTransaction = async (mobilePhoneData: OldMobilePh
 
 // Helper to convert Shamsi YYYY/MM/DD to ISO YYYY-MM-DD for DB storage if needed for specific columns
 // This is not actively used by ledger functions currently as they expect ISO directly
-const fromShamsiStringToISO = (shamsiDateString?: string | null): string | undefined => {
+export const fromShamsiStringToISO = (shamsiDateString?: string | null): string | undefined => {
     if (!shamsiDateString) return undefined;
     try {
         const m = moment(shamsiDateString, 'jYYYY/jMM/jDD');

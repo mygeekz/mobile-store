@@ -7,8 +7,11 @@ import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import MobilePhones from './pages/MobilePhones';
 import Sales from './pages/Sales';
+import InstallmentSalesPage from './pages/InstallmentSalesPage'; // New
+import AddInstallmentSalePage from './pages/AddInstallmentSalePage'; // New
+import InstallmentSaleDetailPage from './pages/InstallmentSaleDetailPage'; // New
 import Customers from './pages/Customers';
-import CustomerDetail from './pages/CustomerDetail'; 
+import CustomerDetailPage from './pages/CustomerDetail'; 
 import Partners from './pages/Partners';
 import PartnerDetail from './pages/PartnerDetail';
 import Reports from './pages/Reports'; // Main Hub
@@ -18,7 +21,7 @@ import CreditorsReport from './pages/reports/CreditorsReport'; // Individual Rep
 import TopCustomersReport from './pages/reports/TopCustomersReport'; // Individual Report
 import TopSuppliersReport from './pages/reports/TopSuppliersReport'; // Individual Report
 import Invoices from './pages/Invoices';
-import InvoiceDetail from './pages/InvoiceDetail'; // New
+import InvoiceDetail from './pages/InvoiceDetail'; 
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 import { SIDEBAR_ITEMS } from './constants';
@@ -38,6 +41,13 @@ const App: React.FC = () => {
     const invoiceDetailMatch = location.pathname.match(/^\/invoices\/(\d+)$/);
     if (invoiceDetailMatch && invoiceDetailMatch[1]) {
       return `فاکتور فروش شماره ${Number(invoiceDetailMatch[1]).toLocaleString('fa-IR')}`;
+    }
+    const installmentSaleDetailMatch = location.pathname.match(/^\/installment-sales\/(\d+)$/);
+    if (installmentSaleDetailMatch) {
+      return 'جزئیات فروش اقساطی';
+    }
+    if (location.pathname === '/installment-sales/new') {
+      return 'ثبت فروش اقساطی جدید';
     }
     
     // Specific titles for report sub-pages
@@ -72,8 +82,13 @@ const App: React.FC = () => {
             <Route path="/products" element={<Products />} />
             <Route path="/mobile-phones" element={<MobilePhones />} />
             <Route path="/sales" element={<Sales />} />
+            {/* Installment Sales Routes */}
+            <Route path="/installment-sales" element={<InstallmentSalesPage />} />
+            <Route path="/installment-sales/new" element={<AddInstallmentSalePage />} />
+            <Route path="/installment-sales/:id" element={<InstallmentSaleDetailPage />} />
+
             <Route path="/customers" element={<Customers />} />
-            <Route path="/customers/:id" element={<CustomerDetail />} />
+            <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/partners" element={<Partners />} />
             <Route path="/partners/:id" element={<PartnerDetail />} />
             
